@@ -427,8 +427,8 @@ function DashboardPage() {
       )}
 
       {dashboard.permissions.view_financials && (
-        <div className="mt-8">
-          <ResetDatabaseCard />
+        <div className="mt-8 ">
+          <ResetDatabaseCard show={false} />
         </div>
       )}
     </div>

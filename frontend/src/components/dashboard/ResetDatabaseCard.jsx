@@ -3,7 +3,7 @@ import Icon from "../Icon";
 import { resetDatabase } from "../../api/systemApi";
 import useAlert from "../../hooks/useAlert";
 
-export default function ResetDatabaseCard() {
+export default function ResetDatabaseCard({ show = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,7 +36,9 @@ export default function ResetDatabaseCard() {
 
   return (
     <>
-      <section className="premium-surface rounded-xl border-l-4 border-l-red-500 p-5 sm:p-6">
+      <section
+        className={`premium-surface rounded-xl border-l-4 border-l-red-500 p-5 sm:p-6 ${show ? "block" : "hidden"}`}
+      >
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h3 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
@@ -44,7 +46,8 @@ export default function ResetDatabaseCard() {
               Reset Database
             </h3>
             <p className="mt-1 text-xs text-slate-500">
-              Permanently delete all sales, products, expenses, and inventory data. This action cannot be undone.
+              Permanently delete all sales, products, expenses, and inventory
+              data. This action cannot be undone.
             </p>
           </div>
           <button
@@ -64,19 +67,23 @@ export default function ResetDatabaseCard() {
               <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-red-100">
                 <Icon name="warning" className="size-6 text-red-600" />
               </div>
-              <h3 className="mt-4 text-lg font-extrabold text-red-900">Clear All Data</h3>
+              <h3 className="mt-4 text-lg font-extrabold text-red-900">
+                Clear All Data
+              </h3>
               <p className="mt-2 text-sm text-red-700">
-                Are you absolutely sure? This will delete all products, categories, stock, sales, and history. Your login will be preserved.
+                Are you absolutely sure? This will delete all products,
+                categories, stock, sales, and history. Your login will be
+                preserved.
               </p>
             </div>
-            
+
             <form onSubmit={handleReset} className="p-6">
               {error && (
                 <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">
                   {error}
                 </div>
               )}
-              
+
               <label className="block text-sm font-bold text-slate-700">
                 Admin Password
               </label>

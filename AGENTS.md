@@ -1,28 +1,25 @@
-# MH Mini Mart — Codex Project Instructions
+# Mobile Shop POS — Project Instructions
 
 ## 1. Project Identity
 
-Project name: **MH Mini Mart**
+Project name: **Mobile Shop POS**
 
-MH Mini Mart is a simple, minimal, offline-first Point of Sale and management system for one physical bakery and mini-mart shop.
-
-The system will run locally on a Windows computer using XAMPP. It does not require web hosting or a permanent internet connection.
+Mobile Shop POS is a fast, clean, offline-capable Point of Sale and store management system tailored for mobile phone and electronics retail shops.
 
 Primary users:
 
 - Admin
 - Cashier
 
-The application must prioritize:
+The application prioritizes:
 
-- Fast billing
-- Simple navigation
-- Reliable stock handling
-- Accurate sales records
-- Easy receipt printing
-- Clear reports
-- Secure local operation
-- Maintainable code
+- Ultra-fast billing & barcode scanning
+- IMEI / Serial / Batch & Expiry tracking
+- Reliable stock transactions
+- Accurate sales & profit records
+- Easy thermal receipt printing (80mm)
+- Cloud synchronization & Supabase database integration
+- Maintainable, modular code
 
 ---
 
@@ -30,54 +27,31 @@ The application must prioritize:
 
 ### Frontend
 
-- React.js
+- React.js (React 19)
 - Vite
 - JavaScript
 - React Router
-- Axios
+- Supabase JS SDK (`@supabase/supabase-js`)
+- Axios (fallback client)
 - Tailwind CSS
 
-Do not add another UI framework unless explicitly requested.
+### Backend & Database
 
-Do not use Bootstrap.
+- **Supabase** (PostgreSQL 15+)
+- Supabase Row Level Security (RLS)
+- PostgreSQL Stored Procedures & Atomic RPC Transaction Functions (`complete_sale_rpc`, `verify_user_login_rpc`)
+- Supabase Realtime & Storage (for product images & shop logos)
+- IndexedDB for client-side offline caching and fallback
 
-Do not use TypeScript unless explicitly requested.
-
-### Backend
-
-- Core PHP
-- PHP 8.1 or newer
-- PDO
-- REST-style JSON API
-- PHP sessions for authentication
-- Object-oriented architecture using classes and namespaces
-- Controllers, services, and repositories with dependency injection where practical
-
-Do not introduce Laravel, Symfony, CodeIgniter, or another PHP framework unless explicitly requested.
-
-### Database
-
-- MySQL
-- InnoDB tables
-- UTF-8 using `utf8mb4`
-- Foreign keys where appropriate
-- Database transactions for critical operations
-
-### Local environment
+### Environment
 
 Frontend development URL:
 
 `http://localhost:5173`
 
-Backend API URL:
+Database:
 
-`http://localhost/mh-mini-mart-api`
-
-MySQL database name:
-
-`mh_mini_mart`
-
-Production frontend may eventually be built and served locally through Apache.
+Supabase PostgreSQL Database
 
 ---
 
@@ -86,41 +60,29 @@ Production frontend may eventually be built and served locally through Apache.
 Use the following general structure:
 
 ```text
-mh-mini-mart/
+mobile-shop-pos/
 ├── AGENTS.md
 ├── README.md
-├── frontend/
-│   ├── public/
-│   ├── src/
-│   │   ├── api/
-│   │   ├── assets/
-│   │   ├── components/
-│   │   ├── context/
-│   │   ├── hooks/
-│   │   ├── layouts/
-│   │   ├── pages/
-│   │   ├── routes/
-│   │   ├── styles/
-│   │   ├── utils/
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   └── package.json
-│
-├── backend/
+├── package.json
+├── vite.config.js
+├── index.html
+├── .env
+├── public/
+├── src/
 │   ├── api/
-│   ├── config/
-│   ├── controllers/
-│   ├── helpers/
-│   ├── middleware/
-│   ├── models/
-│   ├── repositories/
-│   ├── services/
-│   ├── uploads/
-│   └── index.php
+│   ├── assets/
+│   ├── components/
+│   ├── context/
+│   ├── hooks/
+│   ├── layouts/
+│   ├── pages/
+│   ├── routes/
+│   ├── styles/
+│   ├── utils/
+│   ├── App.jsx
+│   └── main.jsx
 │
-└── database/
-    ├── migrations/
-    ├── seeds/
+└── supabase/
     └── schema.sql
 ```
 

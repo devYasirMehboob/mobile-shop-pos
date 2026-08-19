@@ -16,12 +16,13 @@ import { logger } from "../utils/logger";
 const AuthContext = createContext(null);
 
 function getSafeErrorMessage(error, fallback) {
-  if (!error.response) {
-    logger.warn("API_NETWORK_ERROR", error);
-    return "The server could not be reached. Please check the API server or hosting security settings.";
+  if (error?.message) {
+    return error.message;
   }
-  logger.warn("API_ERROR_RESPONSE", error.response);
-  return error.response.data?.message || fallback;
+  if (error?.response?.data?.message) {
+    return error.response.data.message;
+  }
+  return fallback;
 }
 
 export function AuthProvider({ children }) {

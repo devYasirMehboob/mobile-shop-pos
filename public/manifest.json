@@ -9,9 +9,9 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/vite.svg",
+      "src": "/mh-favico.jpeg",
       "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "type": "image/jpeg",
       "purpose": "any maskable"
     }
   ]

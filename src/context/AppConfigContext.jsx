@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import apiClient from "../api/apiClient";
+import supabase, { isSupabaseConfigured } from "../api/supabaseClient";
 import { setDebugMode } from "../utils/logger";
 
 const AppConfigContext = createContext();
@@ -14,8 +15,17 @@ export function AppConfigProvider({ children }) {
     // Configure default fallback first
     setDebugMode(false);
 
+    if (isSupabaseConfigured()) {
+      // In Supabase mode, resolve app config directly without legacy PHP server
+      if (isMounted) {
+        setConfig({ debug: false, version: "1.0.0", mode: "supabase" });
+        setLoading(false);
+      }
+      return;
+    }
+
     apiClient
-      .get("/app-config")
+      .get("/app-config", { silent: true })
       .then((response) => {
         if (isMounted && response.data?.success) {
           const fetchedConfig = response.data.data;

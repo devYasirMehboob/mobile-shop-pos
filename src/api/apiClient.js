@@ -53,8 +53,10 @@ apiClient.interceptors.response.use(
     // Handle Network Errors (no response from server)
     if (!error.response) {
       const isOfflineSession = Boolean(typeof sessionStorage !== "undefined" && sessionStorage.getItem("mh_offline_session"));
-      if (!error.config?.silent && !isOfflineSession) {
-        alertManager.error(`The local server is unavailable. Check Apache and MySQL.\nReference: ${requestId}`, { preventDuplicate: true, id: `network-error` });
+      const isSupabase = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== "https://your-project.supabase.co");
+      
+      if (!error.config?.silent && !isOfflineSession && !isSupabase) {
+        alertManager.error(`Server connection failed.\nReference: ${requestId}`, { preventDuplicate: true, id: `network-error` });
       }
       return Promise.reject(error);
     }

@@ -22,7 +22,7 @@ export async function loginUser(email, password) {
     }
 
     if (!data?.success) {
-      throw new Error(data?.message || "Invalid credentials.");
+      throw new Error(data?.message || "Invalid email or password.");
     }
 
     // Save session in local storage
@@ -30,8 +30,8 @@ export async function loginUser(email, password) {
     return data.data;
   }
 
-  const response = await apiClient.post("/auth/login", { email, password });
-  return response.data.data;
+  // If Supabase keys are not set in .env
+  throw new Error("Please enter your real VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env file.");
 }
 
 export async function getCurrentUser() {

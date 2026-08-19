@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
 import apiClient from '../api/apiClient';
+import supabase, { isSupabaseConfigured } from '../api/supabaseClient';
 import { getPosProducts } from '../api/posApi';
 import {
   getDeviceConfig,
@@ -55,6 +56,19 @@ export function OfflineProvider({ children }) {
       setIsOnline(false);
       return false;
     }
+
+    if (isSupabaseConfigured()) {
+      try {
+        const { error } = await supabase.from('settings').select('id').limit(1);
+        const onlineState = !error;
+        setIsOnline(onlineState);
+        return onlineState;
+      } catch {
+        setIsOnline(false);
+        return false;
+      }
+    }
+
     try {
       const response = await apiClient.get('/health', { silent: true, timeout: 5000 });
       const onlineState = response.data?.success === true || response.status === 200;
@@ -108,7 +122,71 @@ export function OfflineProvider({ children }) {
 
       setSyncStatusMessage(`Syncing ${salesToSync.length} offline sales...`);
 
-      // Format payload for backend batch sync endpoint
+      if (isSupabaseConfigured()) {
+        let syncedCount = 0;
+        let conflictCount = 0;
+
+        for (const s of salesToSync) {
+          try {
+            const salePayload = {
+              request_token: s.request_token || ('off_' + s.offline_sale_id),
+              cashier_id: s.cashier_id || 1,
+              customer_name: s.customer_name || null,
+              customer_phone: s.customer_phone || null,
+              discount_type: s.discount_type || 'none',
+              discount_value: s.discount_value || 0,
+              discount_amount: s.discount_amount || 0,
+              tax_amount: s.tax_amount || 0,
+              grand_total: s.grand_total,
+              amount_received: s.amount_received || s.grand_total,
+              change_returned: s.change_returned || 0,
+              payment_method: s.payment_method || 'cash',
+              notes: s.notes ? `[Offline Sync] ${s.notes}` : '[Offline Sync]',
+              items: (s.items || []).map((i) => ({
+                product_id: Number(i.product_id),
+                quantity: parseFloat(i.quantity),
+                unit_price: parseFloat(i.unit_price),
+                line_total: parseFloat(i.line_total || (i.quantity * i.unit_price)),
+              })),
+            };
+
+            const { data: res, error } = await supabase.rpc('complete_sale_rpc', { payload: salePayload });
+
+            if (!error && res?.success) {
+              await updateOfflineSaleStatus(s.offline_sale_id, {
+                sync_status: 'synced',
+                server_sale_id: res.data?.id,
+                server_invoice_number: res.data?.invoice_number,
+                synced_at: new Date().toISOString(),
+              });
+              syncedCount++;
+            } else {
+              await updateOfflineSaleStatus(s.offline_sale_id, {
+                sync_status: 'failed',
+                last_error: error?.message || res?.message || 'Sync failed',
+              });
+              conflictCount++;
+            }
+          } catch (err) {
+            await updateOfflineSaleStatus(s.offline_sale_id, {
+              sync_status: 'failed',
+              last_error: err.message,
+            });
+            conflictCount++;
+          }
+        }
+
+        const remainingPending = await getPendingOfflineSalesCount();
+        setPendingSyncCount(remainingPending);
+        setLastSyncTime(new Date().toISOString());
+        await refreshProductCache();
+
+        setSyncStatusMessage(`Sync completed: ${syncedCount} synced, ${conflictCount} conflicts.`);
+        setIsSyncing(false);
+        return { success: true, synced: syncedCount, conflicts: conflictCount };
+      }
+
+      // Format payload for legacy backend batch sync endpoint
       const payloadSales = salesToSync.map((s) => ({
         offline_sale_id: s.offline_sale_id,
         request_token: s.request_token || ('off_' + s.offline_sale_id),

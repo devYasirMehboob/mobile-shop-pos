@@ -31,18 +31,15 @@ const permitted = (permission, component) => (
 
 import NotificationsPage from "./pages/NotificationsPage";
 import AlertProvider from "./components/feedback/AlertProvider";
-import { OfflineProvider } from "./context/OfflineContext";
-import OfflineBanner from "./components/common/OfflineBanner";
 
 function App() {
   return (
-    <OfflineProvider>
-      <AlertProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route element={<AppLayout />}>
-              <Route index element={<Navigate to="/pos" replace />} />
+    <AlertProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<Navigate to="/pos" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route
                 path="pos"
@@ -134,7 +131,6 @@ function App() {
           <Route path="*" element={<Navigate to="/pos" replace />} />
         </Routes>
       </AlertProvider>
-    </OfflineProvider>
   );
 }
 export default App;

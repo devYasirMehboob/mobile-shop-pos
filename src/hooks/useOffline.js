@@ -1,10 +1,12 @@
-import { useContext } from 'react';
-import { OfflineContext } from '../context/OfflineContext';
-
+// Offline module has been decommissioned. Cloud Supabase is the primary backend.
 export default function useOffline() {
-  const context = useContext(OfflineContext);
-  if (!context) {
-    throw new Error('useOffline must be used within an OfflineProvider.');
-  }
-  return context;
+  return {
+    isOnline: true,
+    isEmergencyMode: false,
+    offlineUser: null,
+    pendingSyncCount: 0,
+    isSyncing: false,
+    syncStatusMessage: "",
+    deviceConfig: null,
+  };
 }

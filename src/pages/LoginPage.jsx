@@ -2,86 +2,54 @@ import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import Icon from "../components/Icon";
 import useAuth from "../hooks/useAuth";
-import useOffline from "../hooks/useOffline";
 
 function homeFor(user) {
-  if (user?.permissions?.includes("dashboard.view")) return "/dashboard";
-  if (user?.permissions?.includes("pos.access")) return "/pos";
+  if (user?.role === "admin" || user?.permissions?.includes("dashboard.view")) return "/dashboard";
+  if (user?.role === "cashier" || user?.permissions?.includes("pos.access")) return "/pos";
   if (user?.permissions?.includes("sales.view")) return "/sales";
-  return "/access-denied";
+  return "/dashboard";
 }
 
 function LoginPage() {
   const { user, isLoading, login } = useAuth();
-  const { isOnline, isEmergencyMode, offlineUser, loginWithOfflinePin, deviceConfig } = useOffline();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [mode, setMode] = useState(navigator.onLine ? "online" : "offline");
   const [email, setEmail] = useState("admin@mobileshop.com");
   const [password, setPassword] = useState("admin123");
-  const [pin, setPin] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     document.title = "Login | Mobile Shop POS";
-    if (!navigator.onLine) {
-      setMode("offline");
-    }
   }, []);
 
-  const currentUser = user || (isEmergencyMode ? offlineUser : null);
-  if (!isLoading && currentUser) return <Navigate to={homeFor(currentUser)} replace />;
+  if (!isLoading && user) return <Navigate to={homeFor(user)} replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
 
-    if (mode === "online") {
-      if (!email.trim()) {
-        setError("Enter your email address.");
-        return;
-      }
-      if (!password) {
-        setError("Enter your password.");
-        return;
-      }
+    if (!email.trim()) {
+      setError("Enter your email address.");
+      return;
+    }
+    if (!password) {
+      setError("Enter your password.");
+      return;
+    }
 
-      setIsSubmitting(true);
-      try {
-        const loggedInUser = await login(email.trim(), password);
-        navigate(location.state?.from?.pathname || homeFor(loggedInUser), {
-          replace: true,
-        });
-      } catch (submitError) {
-        setError(submitError.message);
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else {
-      // Offline Emergency Mode PIN Login
-      if (!pin) {
-        setError("Enter your 6-8 digit Offline PIN.");
-        return;
-      }
-
-      setIsSubmitting(true);
-      try {
-        const res = await loginWithOfflinePin(pin);
-        if (res.success) {
-          navigate(location.state?.from?.pathname || homeFor(res.user), {
-            replace: true,
-          });
-        } else {
-          setError(res.message);
-        }
-      } catch (err) {
-        setError(err.message || "Failed to log in offline.");
-      } finally {
-        setIsSubmitting(false);
-      }
+    setIsSubmitting(true);
+    try {
+      const loggedInUser = await login(email.trim(), password);
+      navigate(location.state?.from?.pathname || homeFor(loggedInUser), {
+        replace: true,
+      });
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -105,13 +73,13 @@ function LoginPage() {
 
           <div className="max-w-lg">
             <span className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200">
-              Local / Fast / Secure
+              Fast / Cloud / Secure
             </span>
             <h1 className="mt-6 text-4xl font-extrabold leading-tight tracking-[-0.035em]">
-              Everything your shop needs, in one calm workspace.
+              Everything your mobile shop needs, in one calm workspace.
             </h1>
             <p className="mt-5 max-w-md text-sm leading-7 text-slate-300">
-              Manage products, inventory, billing, and daily operations without
+              Manage products, inventory, billing, purchases, and daily operations without
               unnecessary complexity.
             </p>
           </div>
@@ -143,38 +111,14 @@ function LoginPage() {
               </span>
             </div>
 
-            {/* Mode Switcher Tabs */}
-            <div className="mb-6 flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => { setMode("online"); setError(""); }}
-                className={`flex-1 rounded-lg py-2 transition-all ${
-                  mode === "online" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                Online Login
-              </button>
-              <button
-                type="button"
-                onClick={() => { setMode("offline"); setError(""); }}
-                className={`flex-1 rounded-lg py-2 transition-all ${
-                  mode === "offline" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                Emergency Offline PIN
-              </button>
-            </div>
-
             <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-blue-600">
-              {mode === "online" ? "Secure shop access" : "Offline Emergency Access"}
+              Secure Shop Access
             </p>
             <h2 className="mt-2 text-3xl font-extrabold tracking-[-0.03em] text-slate-900">
-              {mode === "online" ? "Welcome back" : "Offline Login"}
+              Welcome back
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              {mode === "online"
-                ? "Enter your account email and password to open your workspace."
-                : "Enter your 6-8 digit Offline PIN to access emergency POS and sales."}
+              Enter your account email and password to open your workspace.
             </p>
 
             {error && (
@@ -188,107 +132,67 @@ function LoginPage() {
             )}
 
             <form className="mt-6 space-y-4" onSubmit={handleSubmit} noValidate>
-              {mode === "online" ? (
-                <>
-                  <div>
-                    <label
-                      className="mb-1.5 block text-sm font-bold text-slate-700"
-                      htmlFor="email"
-                    >
-                      Email Address
-                    </label>
-                    <input
-                      className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
-                      id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="username"
-                      placeholder="admin@mobileshop.com"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      disabled={isSubmitting}
-                      autoFocus
-                    />
-                  </div>
+              <div>
+                <label
+                  className="mb-1.5 block text-sm font-bold text-slate-700"
+                  htmlFor="email"
+                >
+                  Email Address
+                </label>
+                <input
+                  className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="username"
+                  placeholder="admin@mobileshop.com"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  disabled={isSubmitting}
+                  autoFocus
+                />
+              </div>
 
-                  <div>
-                    <label
-                      className="mb-1.5 block text-sm font-bold text-slate-700"
-                      htmlFor="password"
-                    >
-                      Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pr-12 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
-                        id="password"
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        autoComplete="current-password"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        disabled={isSubmitting}
-                      />
-                      <button
-                        type="button"
-                        className="absolute inset-y-0 right-0 grid w-12 place-items-center text-slate-400 hover:text-blue-600"
-                        onClick={() => setShowPassword((current) => !current)}
-                        tabIndex="-1"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                        disabled={isSubmitting}
-                      >
-                        <Icon name="eye" className="size-5" />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label
-                    className="mb-2 block text-sm font-bold text-slate-700"
-                    htmlFor="pin"
-                  >
-                    6-8 Digit Offline PIN
-                  </label>
+              <div>
+                <label
+                  className="mb-1.5 block text-sm font-bold text-slate-700"
+                  htmlFor="password"
+                >
+                  Password
+                </label>
+                <div className="relative">
                   <input
-                    className="min-h-12 w-full tracking-[0.25em] text-center text-lg font-bold rounded-xl border border-slate-200 bg-slate-50 px-4 text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
-                    id="pin"
-                    name="pin"
-                    type="password"
-                    maxLength={8}
-                    placeholder="••••••"
-                    value={pin}
-                    onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))}
+                    className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 pr-12 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
                     disabled={isSubmitting}
-                    autoFocus
                   />
-                  {!deviceConfig?.is_enabled && (
-                    <p className="mt-2 text-xs text-amber-600">
-                      Emergency access is not set up on this device. Log in online first and set a PIN in Settings.
-                    </p>
-                  )}
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 grid w-12 place-items-center text-slate-400 hover:text-blue-600"
+                    onClick={() => setShowPassword((current) => !current)}
+                    tabIndex="-1"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    disabled={isSubmitting}
+                  >
+                    <Icon name="eye" className="size-5" />
+                  </button>
                 </div>
-              )}
+              </div>
 
               <button
                 className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                 type="submit"
-                disabled={isSubmitting || (mode === "offline" && !deviceConfig?.is_enabled)}
+                disabled={isSubmitting}
               >
-                {isSubmitting
-                  ? "Verifying..."
-                  : mode === "online"
-                  ? "Login Online"
-                  : "Login Offline"}
-                {!isSubmitting && <Icon name="arrow" className="size-4" />}
+                {isSubmitting ? "Signing in..." : "Login to shop"}
               </button>
             </form>
-
-            <div className="mt-8 flex items-center gap-2 text-xs text-slate-400">
-              <Icon name="check" className="size-4 text-emerald-500" />
-              <span>Runs securely on your authorized local computer</span>
-            </div>
           </div>
         </section>
       </div>

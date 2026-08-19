@@ -24,8 +24,19 @@ export async function getPosProducts(params = {}, signal) {
       category_name: p.categories?.name || "",
     }));
 
+    const page = Number(params.page) || 1;
+    const limit = Number(params.limit) || 60;
+    const total = (data || []).length;
+    const total_pages = Math.ceil(total / limit) || 1;
+
     return {
       products: formatted,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages,
+      },
     };
   }
 

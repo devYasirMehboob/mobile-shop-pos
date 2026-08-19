@@ -26,9 +26,20 @@ export async function getProducts(filters = {}) {
       category_name: p.categories?.name || "",
     }));
 
+    const page = Number(filters.page) || 1;
+    const limit = Number(filters.limit) || 10;
+    const total = (data || []).length;
+    const total_pages = Math.ceil(total / limit) || 1;
+
     return {
       products: formatted,
-      total: formatted.length,
+      total,
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages,
+      },
     };
   }
 

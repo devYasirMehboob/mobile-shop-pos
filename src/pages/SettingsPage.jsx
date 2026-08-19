@@ -18,7 +18,6 @@ import SettingsSaveBar from "../components/settings/SettingsSaveBar";
 import SettingsSectionForm from "../components/settings/SettingsSectionForm";
 import { settingsSections } from "../components/settings/settingsConfig";
 import useSettings from "../hooks/useSettings";
-import OfflineSettingsForm from "../components/settings/OfflineSettingsForm";
 const safe = (error, fallback) => error.response?.data?.message || fallback;
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -224,25 +223,19 @@ function SettingsPage() {
         </aside>
 
         <main>
-          {active === "offline" ? (
-            <OfflineSettingsForm />
-          ) : (
-            <>
-              <SettingsSectionForm
-                section={section}
-                values={settings[active]}
-                errors={errors}
-                onChange={change}
-                disabled={busy}
-              />
-              <SettingsSaveBar
-                dirty={dirty}
-                busy={busy}
-                onReset={reset}
-                onSave={save}
-              />
-            </>
-          )}
+          <SettingsSectionForm
+            section={section}
+            values={settings[active]}
+            errors={errors}
+            onChange={change}
+            disabled={busy}
+          />
+          <SettingsSaveBar
+            dirty={dirty}
+            busy={busy}
+            onReset={reset}
+            onSave={save}
+          />
         </main>
       </div>
       </div>

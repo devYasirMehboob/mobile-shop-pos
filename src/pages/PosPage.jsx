@@ -22,15 +22,13 @@ import useHeldSales from "../hooks/useHeldSales";
 import useScanQueue from "../hooks/useScanQueue";
 import useSettings from "../hooks/useSettings";
 import usePermissions from "../hooks/usePermissions";
-import useOffline from "../hooks/useOffline";
-import { getCachedProducts, deductCachedStock, saveOfflineSale, generateOfflineSaleId } from "../utils/idb";
 import { calculateSaleTotals } from "../utils/calculateSaleTotals";
 
 const DRAFT_KEY = "mh-mini-mart-pos-draft-v2";
 const PAGE_SIZE = 60;
 const blankPayment = () => ({ payment_method: "cash", payment_reference: "", amount_received: "", customer_name: "", customer_phone: "", note: "" });
 const newToken = () => crypto.randomUUID();
-// Global error normalization used instead
+
 function readDraft() {
   try {
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}");
@@ -71,7 +69,6 @@ function PosPage() {
   const alert = useAlert();
   const confirmDialog = useConfirmation();
   const { can } = usePermissions();
-  const { isOnline, isEmergencyMode, offlineUser, deviceConfig, refreshConfig, refreshProductCache } = useOffline();
   const notify = useCallback((message, type = "info") => alert[type === "error" ? "error" : "success"](message), [alert]);
 
   const onBarcodeNotFound = useCallback(async (scannedBarcode) => {
@@ -118,11 +115,8 @@ function PosPage() {
 
   useEffect(() => {
     document.title = "POS | Mobile Shop POS";
-    if (isOnline) {
-      getPosCategories().then(setCategories).catch((failure) => notify(normalizeApiError(failure).message, "error"));
-      refreshProductCache().catch(() => undefined);
-    }
-  }, [notify, isOnline, refreshProductCache]);
+    getPosCategories().then(setCategories).catch((failure) => notify(normalizeApiError(failure).message, "error"));
+  }, [notify]);
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ discountType, discountValue, payment, requestToken, activeHeldSaleId, activeHeldReference }));
@@ -138,86 +132,27 @@ function PosPage() {
     setLoading(true);
     setError("");
 
-    if (!isOnline || isEmergencyMode) {
-      getCachedProducts()
-        .then((cachedList) => {
-          let filtered = cachedList.filter(p => p.status === 'active' || !p.status);
-          if (category) {
-            filtered = filtered.filter(p =>
-              (p.category_id && String(p.category_id) === String(category)) ||
-              (p.category_name && p.category_name.toLowerCase() === String(category).toLowerCase())
-            );
-          }
-          if (query) {
-            const q = query.toLowerCase();
-            filtered = filtered.filter(p =>
-              p.name.toLowerCase().includes(q) ||
-              (p.code && p.code.toLowerCase().includes(q)) ||
-              (p.barcode && p.barcode.toLowerCase().includes(q))
-            );
-          }
-          const total = filtered.length;
-          const start = (page - 1) * PAGE_SIZE;
-          setProducts(filtered.slice(start, start + PAGE_SIZE));
-          setPagination({ page, total_pages: Math.ceil(total / PAGE_SIZE) || 1, total });
-        })
-        .catch(() => setError("Failed to load cached offline products."))
-        .finally(() => setLoading(false));
-      return () => controller.abort();
-    }
-
     getPosProducts({ search: query, category_id: category, page, limit: PAGE_SIZE }, controller.signal)
       .then((data) => {
-        setProducts(data.products);
-        setPagination(data.pagination);
-        if (Array.isArray(data.products) && data.products.length > 0) {
-          cacheProducts(data.products, false).catch(() => undefined);
-        }
+        setProducts(data.products || []);
+        setPagination(data.pagination || { page: 1, limit: PAGE_SIZE, total: (data.products || []).length, total_pages: 1 });
       })
       .catch((failure) => {
         if (failure.code === "ERR_CANCELED") return;
-        if (!failure.response) {
-          // Automatic seamless fallback to IndexedDB cache on network error
-          getCachedProducts().then((cachedList) => {
-            let filtered = cachedList.filter(p => p.status === 'active' || !p.status);
-            if (category) {
-              filtered = filtered.filter(p =>
-                (p.category_id && String(p.category_id) === String(category)) ||
-                (p.category_name && p.category_name.toLowerCase() === String(category).toLowerCase())
-              );
-            }
-            if (query) {
-              const q = query.toLowerCase();
-              filtered = filtered.filter(p =>
-                p.name.toLowerCase().includes(q) ||
-                (p.code && p.code.toLowerCase().includes(q)) ||
-                (p.barcode && p.barcode.toLowerCase().includes(q))
-              );
-            }
-            const total = filtered.length;
-            const start = (page - 1) * PAGE_SIZE;
-            setProducts(filtered.slice(start, start + PAGE_SIZE));
-            setPagination({ page, total_pages: Math.ceil(total / PAGE_SIZE) || 1, total });
-          }).catch(() => {
-            setError("Unable to connect to local server or load offline products.");
-          });
-        } else {
-          setError(normalizeApiError(failure).message);
-        }
+        setError(normalizeApiError(failure).message);
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [query, category, page, retryKey, stockRefresh, isOnline, isEmergencyMode]);
+  }, [query, category, page, retryKey, stockRefresh]);
 
   useEffect(() => {
     if (cartValidated.current) return;
     cartValidated.current = true;
     if (initialCartIds.current.length === 0) return;
-    if (!isOnline || isEmergencyMode) return;
     getPosProducts({ ids: initialCartIds.current.join(","), limit: 100 })
-      .then((data) => { const warnings = cart.revalidate(data.products); if (warnings.length) notify(warnings.join(" "), "error"); })
+      .then((data) => { const warnings = cart.revalidate(data.products || []); if (warnings.length) notify(warnings.join(" "), "error"); })
       .catch((failure) => notify(normalizeApiError(failure).message, "error"));
-  }, [cart, notify, isOnline, isEmergencyMode]);
+  }, [cart, notify]);
 
   function add(product, byAmount = false) {
     if (byAmount) {
@@ -361,107 +296,10 @@ function PosPage() {
     const discount = Number(discountValue) || 0;
     if (discount < 0 || (discountType === "percentage" && discount > 100) || (discountType === "fixed" && discount > totals.subtotal)) return notify("Enter a valid discount.", "error");
 
-    // OFFLINE EMERGENCY SALE PROCESSING
-    if (!isOnline || isEmergencyMode) {
-      if (payment.payment_method !== "cash") {
-        return notify("Only Cash payments are allowed in Offline Emergency Mode.", "error");
-      }
-      const amountRec = Number(payment.amount_received || totals.grandTotal);
-      if (amountRec < totals.grandTotal) {
-        return notify("Cash received must cover the grand total.", "error");
-      }
-
-      setIsSubmitting(true);
-      try {
-        const offlineSaleId = generateOfflineSaleId();
-        const now = new Date().toISOString();
-        const changeRet = Math.max(0, amountRec - totals.grandTotal);
-
-        const offlineRecord = {
-          offline_sale_id: offlineSaleId,
-          request_token: requestToken,
-          device_id: deviceConfig?.device_id || 'local_terminal',
-          cashier_id: offlineUser?.id || 1,
-          cashier_name: offlineUser?.name || 'Offline Admin',
-          customer_name: payment.customer_name.trim() || null,
-          customer_phone: payment.customer_phone.trim() || null,
-          created_at: now,
-          items: cart.items.map((item) => ({
-            product_id: item.id,
-            product_name: item.name,
-            product_code: item.code || '',
-            unit_id: item.unit_id || null,
-            unit_name_snapshot: item.unit_name || item.unit_type || 'pcs',
-            unit_price: (item.selling_price || item.price || 0).toString(),
-            quantity: item.cartQuantity,
-            quantity_base: item.cartQuantity,
-            discount_amount: "0.00",
-            line_total: ((item.selling_price || item.price || 0) * item.cartQuantity).toFixed(2),
-          })),
-          subtotal: totals.subtotal.toFixed(2),
-          discount_type: discountType,
-          discount_value: discount.toFixed(2),
-          discount_amount: totals.discountAmount.toFixed(2),
-          tax_amount: totals.taxAmount.toFixed(2),
-          grand_total: totals.grandTotal.toFixed(2),
-          amount_received: amountRec.toFixed(2),
-          change_returned: changeRet.toFixed(2),
-          payment_method: 'cash',
-          payment_status: 'paid',
-          status: 'completed',
-          notes: payment.note.trim() ? `[Offline Sale] ${payment.note.trim()}` : '[Offline Sale]',
-          invoice_number: 'OFFLINE-' + Date.now().toString().slice(-6),
-          sync_status: 'pending',
-          sync_attempts: 0,
-          is_offline: true,
-        };
-
-        // Save offline sale into IndexedDB
-        await saveOfflineSale(offlineRecord);
-
-        // Deduct cached stock in IndexedDB
-        await deductCachedStock(cart.items);
-
-        // Prepare receipt data
-        const offlineReceipt = {
-          id: offlineSaleId,
-          invoice_number: offlineRecord.invoice_number,
-          created_at: now,
-          cashier_name: offlineRecord.cashier_name,
-          customer_name: offlineRecord.customer_name || 'Walk-in Customer',
-          customer_phone: offlineRecord.customer_phone || '',
-          subtotal: totals.subtotal.toFixed(2),
-          discount_type: discountType,
-          discount_amount: totals.discountAmount.toFixed(2),
-          tax_amount: totals.taxAmount.toFixed(2),
-          grand_total: totals.grandTotal.toFixed(2),
-          amount_received: amountRec.toFixed(2),
-          change_returned: changeRet.toFixed(2),
-          payment_method: 'cash',
-          payment_status: 'paid',
-          status: 'completed',
-          notes: offlineRecord.notes,
-          is_offline: true,
-          offline_watermark: 'Offline Sale — Pending Sync',
-          items: offlineRecord.items,
-        };
-
-        setSavedSale(offlineRecord);
-        setReceipt(offlineReceipt);
-        setReceiptOpen(true);
-        resetDraft();
-        refreshConfig();
-        setStockRefresh((value) => value + 1);
-        notify("Offline sale completed and saved locally! Will sync when online.", "success");
-      } catch (err) {
-        notify("Failed to process offline sale: " + err.message, "error");
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
+    if (payment.payment_method === "cash" && Number(payment.amount_received || 0) < totals.grandTotal) {
+      return notify("Cash received must cover the grand total.", "error");
     }
 
-    if (payment.payment_method === "cash" && Number(payment.amount_received || 0) < totals.grandTotal) return notify("Cash received must cover the grand total.", "error");
     setIsSubmitting(true);
     try {
       const response = await completeSale(salePayload());
@@ -512,7 +350,7 @@ function PosPage() {
       {activeHeldSaleId && <div className="premium-surface flex flex-col justify-between gap-2 rounded-xl border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 sm:flex-row sm:items-center"><span><strong>Resumed sale:</strong> {activeHeldReference}</span><span>Holding again will update this record.</span></div>}
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(400px,0.75fr)]">
         <section className="min-w-0 space-y-4">
-          <div className="premium-surface rounded-xl p-4 sm:p-5"><div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-extrabold text-slate-900">Products</h3><p className="mt-1 text-xs text-slate-500">Choose an item or scan its barcode.</p></div><span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[10px] font-extrabold text-slate-500">{pagination.total} available</span></div>
+          <div className="premium-surface rounded-xl p-4 sm:p-5"><div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-extrabold text-slate-900">Products</h3><p className="mt-1 text-xs text-slate-500">Choose an item or scan its barcode.</p></div><span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[10px] font-extrabold text-slate-500">{pagination?.total ?? 0} available</span></div>
             <div className="grid gap-3 2xl:grid-cols-[1fr_280px]">
               <label className="relative"><Icon name="search" className="absolute left-3.5 top-3.5 size-4 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" placeholder="Search name, product code, or barcode" /></label>
               {barcodeSettings.enabled !== false && <form className="flex gap-2" onSubmit={scan}><input ref={barcodeRef} value={barcode} onChange={(event) => setBarcode(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50" placeholder="Scan barcode + Enter" aria-label="Barcode" autoComplete="off" /><button className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60" disabled={scanQueue.isProcessing} type="submit"><Icon name="barcode" className="mr-1.5 size-4" />{scanQueue.isProcessing ? "Checking" : "Add"}</button></form>}
@@ -520,7 +358,7 @@ function PosPage() {
             <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto"><Filter active={!category} label="All products" onClick={() => { setCategory(""); setPage(1); }} />{categories.map((item) => <Filter key={item.id} active={category === String(item.id)} label={item.name} onClick={() => { setCategory(String(item.id)); setPage(1); }} />)}</div>
           </div>
           {error && <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><span>{error}</span><button type="button" className="font-bold underline" onClick={() => setRetryKey((value) => value + 1)}>Retry</button></div>}
-          {loading ? <Skeleton /> : products.length ? <><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">{products.map((product) => <ProductCard key={product.id} product={product} onAdd={add} />)}</div><Pagination pagination={pagination} onPage={setPage} /></> : <EmptyProducts isOffline={!isOnline || isEmergencyMode} />}
+          {loading ? <Skeleton /> : products.length ? <><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">{products.map((product) => <ProductCard key={product.id} product={product} onAdd={add} />)}</div><Pagination pagination={pagination} onPage={setPage} /></> : <EmptyProducts />}
         </section>
         <aside className="premium-surface overflow-hidden rounded-xl xl:sticky xl:top-[98px]">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-700"><Icon name="pos" className="size-[18px]" /></span><div><h3 className="text-base font-extrabold text-slate-900">Current cart</h3><p className="mt-0.5 text-[10px] font-medium text-slate-400">{cart.items.length} product(s) selected</p></div></div>{cart.items.length > 0 && <button className="rounded-lg px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50" type="button" onClick={confirmClearCart}>Clear</button>}</div>
@@ -539,20 +377,18 @@ function PosPage() {
 }
 
 function Filter({ active, label, onClick }) { return <button type="button" onClick={onClick} className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition ${active ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"}`}>{label}</button>; }
-function Pagination({ pagination, onPage }) { if (pagination.total_pages <= 1) return null; return <div className="premium-surface flex items-center justify-between rounded-xl px-4 py-3 text-xs text-slate-500"><span>{pagination.total} products · Page {pagination.page} of {pagination.total_pages}</span><div className="flex gap-2"><button type="button" disabled={pagination.page <= 1} onClick={() => onPage(pagination.page - 1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-bold transition hover:bg-slate-50 disabled:opacity-40">Previous</button><button type="button" disabled={pagination.page >= pagination.total_pages} onClick={() => onPage(pagination.page + 1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-bold transition hover:bg-slate-50 disabled:opacity-40">Next</button></div></div>; }
+function Pagination({ pagination, onPage }) { if (!pagination || pagination.total_pages <= 1) return null; return <div className="premium-surface flex items-center justify-between rounded-xl px-4 py-3 text-xs text-slate-500"><span>{pagination.total || 0} products · Page {pagination.page || 1} of {pagination.total_pages || 1}</span><div className="flex gap-2"><button type="button" disabled={pagination.page <= 1} onClick={() => onPage(pagination.page - 1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-bold transition hover:bg-slate-50 disabled:opacity-40">Previous</button><button type="button" disabled={pagination.page >= pagination.total_pages} onClick={() => onPage(pagination.page + 1)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-bold transition hover:bg-slate-50 disabled:opacity-40">Next</button></div></div>; }
 function Skeleton() { return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <div key={index} className="premium-surface h-48 animate-pulse overflow-hidden rounded-xl"><div className="h-28 bg-slate-100" /></div>)}</div>; }
-function EmptyProducts({ isOffline }) {
+function EmptyProducts() {
   return (
     <div className="premium-surface grid min-h-64 place-items-center rounded-xl p-6 text-center">
       <div>
         <Icon name="search" className="mx-auto size-8 text-slate-300" />
         <p className="mt-3 text-base font-extrabold text-slate-800">
-          {isOffline ? "No cached products found" : "No products found"}
+          No products found
         </p>
         <p className="mt-1 max-w-sm text-xs text-slate-400">
-          {isOffline
-            ? "Your offline product database is empty. Please connect online once or sync catalog in Settings > Offline Emergency."
-            : "Try another search or category filter."}
+          Try another search or category filter.
         </p>
       </div>
     </div>

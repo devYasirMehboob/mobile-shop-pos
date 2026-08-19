@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE TABLE IF NOT EXISTS access_credentials (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL DEFAULT 'Shop User',
+    email VARCHAR(150) NOT NULL UNIQUE,
     phone VARCHAR(30) NULL,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'cashier',
@@ -535,12 +536,11 @@ INSERT INTO settings (setting_group, setting_key, setting_value, value_type, is_
 ON CONFLICT (setting_group, setting_key) DO NOTHING;
 
 -- Seed Default Admin & Cashier User Credentials
--- Default password: "admin" -> $2y$10$wN0zB7R8v2Iu4n9P.X1Oqu0l5V5zV8q0CqYqX0Kx1C9X3l.6r0I4a
-INSERT INTO access_credentials (id, name, phone, password_hash, role, is_active)
+INSERT INTO access_credentials (id, name, email, phone, password_hash, role, is_active)
 VALUES 
-(1, 'Admin', '+923000000000', crypt('admin123', gen_salt('bf')), 'admin', 1),
-(2, 'Cashier 1', '+923000000001', crypt('cashier123', gen_salt('bf')), 'cashier', 1)
-ON CONFLICT (id) DO NOTHING;
+(1, 'Admin', 'admin@mobileshop.com', '+923000000000', crypt('admin123', gen_salt('bf')), 'admin', 1),
+(2, 'Cashier 1', 'cashier@mobileshop.com', '+923000000001', crypt('cashier123', gen_salt('bf')), 'cashier', 1)
+ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email, password_hash=EXCLUDED.password_hash;
 
 -- 12. STORED PROCEDURES / RPC FUNCTIONS FOR ATOMIC OPERATIONS
 
@@ -712,46 +712,54 @@ BEGIN
 END;
 $$;
 
--- Verify Login Function
-CREATE OR REPLACE FUNCTION verify_user_login_rpc(p_password TEXT)
+-- Verify Login Function (Email + Password)
+CREATE OR REPLACE FUNCTION verify_user_login_rpc(p_email TEXT, p_password TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
     v_user RECORD;
-    v_matched BOOLEAN := FALSE;
+    v_clean_email TEXT;
 BEGIN
-    FOR v_user IN 
-        SELECT id, name, phone, password_hash, role, is_active 
-        FROM access_credentials 
-        WHERE is_active = 1
-    LOOP
-        IF v_user.password_hash = crypt(p_password, v_user.password_hash) OR v_user.password_hash = p_password THEN
-            v_matched := TRUE;
-            
-            -- Update last login time
-            UPDATE access_credentials SET last_login_at = NOW() WHERE id = v_user.id;
+    v_clean_email := LOWER(TRIM(p_email));
 
-            RETURN jsonb_build_object(
-                'success', true,
-                'message', 'Login successful.',
-                'data', jsonb_build_object(
-                    'user', jsonb_build_object(
-                        'id', v_user.id,
-                        'name', v_user.name,
-                        'role', v_user.role,
-                        'phone', v_user.phone
-                    ),
-                    'csrfToken', encode(gen_random_bytes(16), 'hex')
-                )
-            );
-        END IF;
-    END LOOP;
+    SELECT id, name, email, phone, password_hash, role, is_active 
+    INTO v_user
+    FROM access_credentials 
+    WHERE (LOWER(email) = v_clean_email OR email IS NULL OR v_clean_email = '') AND is_active = 1
+    LIMIT 1;
 
-    RETURN jsonb_build_object(
-        'success', false,
-        'message', 'Invalid password. Access denied.'
-    );
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'User account not found with this email.'
+        );
+    END IF;
+
+    IF v_user.password_hash = crypt(p_password, v_user.password_hash) OR v_user.password_hash = p_password THEN
+        -- Update last login time
+        UPDATE access_credentials SET last_login_at = NOW() WHERE id = v_user.id;
+
+        RETURN jsonb_build_object(
+            'success', true,
+            'message', 'Login successful.',
+            'data', jsonb_build_object(
+                'user', jsonb_build_object(
+                    'id', v_user.id,
+                    'name', v_user.name,
+                    'email', v_user.email,
+                    'role', v_user.role,
+                    'phone', v_user.phone
+                ),
+                'csrfToken', encode(gen_random_bytes(16), 'hex')
+            )
+        );
+    ELSE
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Invalid password. Access denied.'
+        );
+    END IF;
 END;
 $$;

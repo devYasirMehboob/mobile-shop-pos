@@ -64,10 +64,10 @@ export function AuthProvider({ children }) {
     };
   }, [refreshCsrfToken]);
   const login = useCallback(
-    async (password) => {
+    async (email, password) => {
       try {
         await refreshCsrfToken();
-        const result = await loginUser(password);
+        const result = await loginUser(email, password);
         sessionStorage.setItem("csrfToken", result.csrfToken);
         setUser(result.user);
         return result.user;

@@ -9,10 +9,11 @@ export async function getCsrfToken() {
   return response.data.data.csrfToken;
 }
 
-export async function loginUser(password) {
+export async function loginUser(email, password) {
   if (isSupabaseConfigured()) {
     // Call Supabase RPC function for direct secure authentication
     const { data, error } = await supabase.rpc("verify_user_login_rpc", {
+      p_email: email,
       p_password: password,
     });
 
@@ -21,7 +22,7 @@ export async function loginUser(password) {
     }
 
     if (!data?.success) {
-      throw new Error(data?.message || "Invalid password.");
+      throw new Error(data?.message || "Invalid credentials.");
     }
 
     // Save session in local storage
@@ -29,7 +30,7 @@ export async function loginUser(password) {
     return data.data;
   }
 
-  const response = await apiClient.post("/auth/login", { password });
+  const response = await apiClient.post("/auth/login", { email, password });
   return response.data.data;
 }
 

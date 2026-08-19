@@ -3,7 +3,7 @@ import supabase, { isSupabaseConfigured } from "./supabaseClient";
 
 export async function getUsers(params = {}) {
   if (isSupabaseConfigured()) {
-    let query = supabase.from("access_credentials").select("id, name, phone, role, is_active, last_login_at, created_at").order("id", { ascending: true });
+    let query = supabase.from("access_credentials").select("id, name, email, phone, role, is_active, last_login_at, created_at").order("id", { ascending: true });
     if (params.search) query = query.ilike("name", `%${params.search}%`);
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -16,7 +16,7 @@ export async function getUsers(params = {}) {
 
 export async function getUser(id) {
   if (isSupabaseConfigured()) {
-    const { data, error } = await supabase.from("access_credentials").select("id, name, phone, role, is_active").eq("id", id).single();
+    const { data, error } = await supabase.from("access_credentials").select("id, name, email, phone, role, is_active").eq("id", id).single();
     if (error) throw new Error(error.message);
     return { user: data, permissions: [] };
   }
@@ -29,6 +29,7 @@ export async function createUser(data) {
   if (isSupabaseConfigured()) {
     const { data: newUser, error } = await supabase.from("access_credentials").insert([{
       name: data.name,
+      email: data.email,
       phone: data.phone,
       password_hash: data.password,
       role: data.role || "cashier",
@@ -45,7 +46,7 @@ export async function createUser(data) {
 
 export async function updateUser(id, data) {
   if (isSupabaseConfigured()) {
-    const updates = { name: data.name, phone: data.phone, role: data.role };
+    const updates = { name: data.name, email: data.email, phone: data.phone, role: data.role };
     if (data.password) updates.password_hash = data.password;
 
     const { data: updated, error } = await supabase.from("access_credentials").update(updates).eq("id", id).select().single();

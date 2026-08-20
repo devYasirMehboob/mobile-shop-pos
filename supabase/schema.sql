@@ -111,6 +111,15 @@ CREATE TABLE IF NOT EXISTS products (
     consumption_unit_id BIGINT NULL,
     consumption_quantity_base NUMERIC(12, 3) NULL,
     allow_custom_sale SMALLINT NOT NULL DEFAULT 0,
+    brand VARCHAR(100) NULL,
+    description TEXT NULL,
+    tax NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    discount_type VARCHAR(20) NOT NULL DEFAULT 'fixed',
+    discount_value NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    warranty VARCHAR(100) NULL,
+    manufacturer VARCHAR(150) NULL,
+    manufactured_date DATE NULL,
+    expiry_date DATE NULL,
     image VARCHAR(255) NULL,
     track_stock SMALLINT NOT NULL DEFAULT 1,
     track_batches SMALLINT NOT NULL DEFAULT 0,
@@ -811,7 +820,6 @@ ALTER TABLE IF EXISTS user_notification_preferences DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS invoice_sequences DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS sale_presets DISABLE ROW LEVEL SECURITY;
 
--- Ensure all product unit & custom sale columns exist
 ALTER TABLE products ADD COLUMN IF NOT EXISTS allow_custom_sale SMALLINT NOT NULL DEFAULT 0;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS base_unit_id BIGINT NULL;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS default_purchase_unit_id BIGINT NULL;
@@ -820,6 +828,15 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_mode VARCHAR(30) NOT NULL DE
 ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_source_id BIGINT NULL;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS consumption_quantity NUMERIC(12, 3) NULL;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS consumption_unit_id BIGINT NULL;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS brand VARCHAR(100) NULL;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT NULL;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tax NUMERIC(5, 2) NOT NULL DEFAULT 0.00;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS discount_type VARCHAR(20) NOT NULL DEFAULT 'fixed';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS discount_value NUMERIC(12, 2) NOT NULL DEFAULT 0.00;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS warranty VARCHAR(100) NULL;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(150) NULL;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS manufactured_date DATE NULL;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS expiry_date DATE NULL;
 -- Ensure all unit columns exist
 ALTER TABLE units ADD COLUMN IF NOT EXISTS unit_type VARCHAR(30) NOT NULL DEFAULT 'count';
 ALTER TABLE units ADD COLUMN IF NOT EXISTS precision INT NOT NULL DEFAULT 0;

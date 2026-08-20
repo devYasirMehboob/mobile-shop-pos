@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import Icon from "../Icon";
+import Icon from "../components/Icon";
 
 export default function ComingSoonPage() {
   // Live ticking countdown state

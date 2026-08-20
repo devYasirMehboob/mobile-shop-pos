@@ -69,16 +69,32 @@ function sanitizeProductForDb(raw) {
     remove_image,
     categories,
     category_name,
+    product_type_select,
+    created_at,
+    updated_at,
+    id,
     ...rest
   } = raw;
 
   return {
     ...rest,
     category_id: Number(rest.category_id),
+    name: rest.name ? String(rest.name).trim() : "",
+    product_code: rest.product_code ? String(rest.product_code).trim() : `PRD-${Date.now()}`,
+    barcode: rest.barcode ? String(rest.barcode).trim() : null,
+    brand: rest.brand ? String(rest.brand).trim() : null,
+    description: rest.description ? String(rest.description).trim() : null,
     purchase_cost: parseFloat(rest.purchase_cost) || 0,
     selling_price: parseFloat(rest.selling_price) || 0,
     quantity: parseFloat(rest.quantity) || 0,
     minimum_stock: parseFloat(rest.minimum_stock) || 0,
+    tax: parseFloat(rest.tax) || 0,
+    discount_type: rest.discount_type || "fixed",
+    discount_value: parseFloat(rest.discount_value) || 0,
+    warranty: rest.warranty || null,
+    manufacturer: rest.manufacturer ? String(rest.manufacturer).trim() : null,
+    manufactured_date: rest.manufactured_date || null,
+    expiry_date: rest.expiry_date || null,
     base_unit_id: rest.base_unit_id ? Number(rest.base_unit_id) : null,
     default_purchase_unit_id: rest.default_purchase_unit_id ? Number(rest.default_purchase_unit_id) : null,
     default_sale_unit_id: rest.default_sale_unit_id ? Number(rest.default_sale_unit_id) : null,
@@ -90,7 +106,7 @@ function sanitizeProductForDb(raw) {
     track_stock: rest.track_stock === false || rest.track_stock === 0 ? 0 : 1,
     track_batches: rest.track_batches ? 1 : 0,
     track_expiry: rest.track_expiry ? 1 : 0,
-    barcode: rest.barcode?.trim() || null,
+    status: rest.status || "active",
   };
 }
 

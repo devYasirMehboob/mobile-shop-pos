@@ -9,7 +9,6 @@ import {
   getProducts,
   productImageUrl,
   updateProduct,
-  updateProductStatus,
   generateProductBarcode,
 } from "../api/productsApi";
 import useAlert from "../hooks/useAlert";
@@ -20,8 +19,8 @@ import Icon from "../components/Icon";
 import LoadingState from "../components/LoadingState";
 import Modal from "../components/Modal";
 import ProductDetails from "../components/products/ProductDetails";
-import ProductForm from "../components/products/ProductForm";
 import ProductTable from "../components/products/ProductTable";
+import DreamsProductFormPage from "../components/products/DreamsProductFormPage";
 import usePermissions from "../hooks/usePermissions";
 import useGlobalBarcodeScanner from "../hooks/useGlobalBarcodeScanner";
 
@@ -30,10 +29,19 @@ const emptyForm = {
   name: "",
   product_code: "",
   barcode: "",
+  brand: "",
+  description: "",
   purchase_cost: "0.00",
   selling_price: "",
   quantity: "0",
-  minimum_stock: "0",
+  minimum_stock: "5",
+  tax: "0",
+  discount_type: "fixed",
+  discount_value: "0",
+  warranty: "1 Year",
+  manufacturer: "",
+  manufactured_date: "",
+  expiry_date: "",
   base_unit_id: "",
   default_purchase_unit_id: "",
   default_sale_unit_id: "",
@@ -79,7 +87,7 @@ function ProductsPage() {
   const alert = useAlert();
   const confirmDialog = useConfirmation();
 
-  const [formMode, setFormMode] = useState(null);
+  const [formMode, setFormMode] = useState(null); // 'create' | 'edit' | null
   const [editingProduct, setEditingProduct] = useState(null);
   const [detailsProduct, setDetailsProduct] = useState(null);
   const [formValues, setFormValues] = useState(emptyForm);
@@ -125,6 +133,14 @@ function ProductsPage() {
     initialize();
   }, [loadProducts, alert]);
 
+  // Handle URL navigation like /products?action=new
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("action") === "new" && canCreate && formMode !== "create") {
+      openCreateForm();
+    }
+  }, [location.search, canCreate, formMode]);
+
   useEffect(() => {
     if (location.state?.newBarcode && canCreate && categories.length > 0) {
       openCreateForm(location.state.newBarcode);
@@ -159,11 +175,14 @@ function ProductsPage() {
     setFormValues({
       ...emptyForm,
       barcode: typeof initialBarcode === "string" ? initialBarcode : "",
-      product_code: `PRD-${Math.floor(100000 + Math.random() * 900000)}`,
+      product_code: `SKU-${Math.floor(100000 + Math.random() * 900000)}`,
     });
     setFormErrors({});
     setImagePreview(null);
     setFormMode("create");
+    if (!location.search.includes("action=new")) {
+      navigate("/products?action=new", { replace: true });
+    }
   }
 
   async function openEditForm(product) {
@@ -173,14 +192,24 @@ function ProductsPage() {
       const latest = await getProduct(product.id);
       setEditingProduct(latest);
       setFormValues({
-        category_id: String(latest.category_id),
-        name: latest.name,
-        product_code: latest.product_code,
+        ...emptyForm,
+        category_id: latest.category_id ? String(latest.category_id) : "",
+        name: latest.name || "",
+        product_code: latest.product_code || "",
         barcode: latest.barcode || "",
+        brand: latest.brand || "",
+        description: latest.description || "",
         purchase_cost: latest.purchase_cost ?? "0.00",
-        selling_price: latest.selling_price,
-        quantity: latest.quantity,
-        minimum_stock: latest.minimum_stock,
+        selling_price: latest.selling_price || "",
+        quantity: latest.quantity ?? "0",
+        minimum_stock: latest.minimum_stock ?? "5",
+        tax: latest.tax ?? "0",
+        discount_type: latest.discount_type || "fixed",
+        discount_value: latest.discount_value ?? "0",
+        warranty: latest.warranty || "1 Year",
+        manufacturer: latest.manufacturer || "",
+        manufactured_date: latest.manufactured_date || "",
+        expiry_date: latest.expiry_date || "",
         base_unit_id: latest.base_unit_id ? String(latest.base_unit_id) : "",
         default_purchase_unit_id: latest.default_purchase_unit_id ? String(latest.default_purchase_unit_id) : "",
         default_sale_unit_id: latest.default_sale_unit_id ? String(latest.default_sale_unit_id) : "",
@@ -193,7 +222,7 @@ function ProductsPage() {
         track_stock: Boolean(Number(latest.track_stock)),
         track_batches: Boolean(Number(latest.track_batches)),
         track_expiry: Boolean(Number(latest.track_expiry)),
-        status: latest.status,
+        status: latest.status || "active",
         image_data: null,
         remove_image: false,
       });
@@ -225,15 +254,13 @@ function ProductsPage() {
     setEditingProduct(null);
     setFormErrors({});
     setImagePreview(null);
+    navigate("/products", { replace: true });
   }
 
   function handleFormChange(event) {
     const { name, value, type, checked } = event.target;
     setFormValues((current) => {
       const next = { ...current, [name]: type === "checkbox" ? checked : value };
-      if (!editingProduct && (next.track_batches || next.track_expiry)) {
-        next.quantity = "0";
-      }
       return next;
     });
     setFormErrors((current) => ({ ...current, [name]: "" }));
@@ -286,12 +313,13 @@ function ProductsPage() {
 
     const requiredErrors = {};
     if (!formValues.name.trim()) requiredErrors.name = "Product name is required.";
-    if (!formValues.product_code.trim()) requiredErrors.product_code = "Product code is required.";
+    if (!formValues.product_code.trim()) requiredErrors.product_code = "SKU is required.";
     if (!formValues.category_id) requiredErrors.category_id = "Select a category.";
     if (!formValues.selling_price || Number(formValues.selling_price) <= 0) requiredErrors.selling_price = "Selling price must be greater than zero.";
 
     if (Object.keys(requiredErrors).length > 0) {
       setFormErrors(requiredErrors);
+      alert.error("Please fill in all required fields highlighted in red.");
       return;
     }
 
@@ -302,15 +330,13 @@ function ProductsPage() {
         ? await updateProduct(editingProduct.id, formValues)
         : await createProduct(formValues);
 
-      setFormMode(null);
-      setEditingProduct(null);
-      setImagePreview(null);
       alert.success(response.message || "Product saved successfully.");
+      closeForm();
       await loadProducts(appliedFilters);
     } catch (error) {
       const normalized = normalizeApiError(error);
-      setFormErrors(normalized.fieldErrors);
-      if (Object.keys(normalized.fieldErrors).length === 0) {
+      setFormErrors(normalized.fieldErrors || {});
+      if (Object.keys(normalized.fieldErrors || {}).length === 0) {
         alert.error(normalized.message);
       }
     } finally {
@@ -366,6 +392,28 @@ function ProductsPage() {
     loadProducts(nextFilters);
   }
 
+  // IF CREATING OR EDITING PRODUCT, RENDER DREAMS PRODUCT FORM VIEW
+  if (formMode === "create" || formMode === "edit") {
+    return (
+      <DreamsProductFormPage
+        values={formValues}
+        errors={formErrors}
+        isEdit={formMode === "edit"}
+        categories={categories}
+        units={units}
+        imagePreview={imagePreview}
+        isSubmitting={isSubmitting}
+        onChange={handleFormChange}
+        onImageChange={handleImageChange}
+        onRemoveImage={removeImage}
+        onSubmit={handleSubmit}
+        onCancel={closeForm}
+        onGenerateBarcode={handleGenerateBarcode}
+      />
+    );
+  }
+
+  // DEFAULT: PRODUCTS LIST VIEW
   return (
     <div className="space-y-5 pb-8">
       {/* 1. TOP HEADER & BREADCRUMB + ACTION BUTTONS */}
@@ -387,7 +435,7 @@ function ProductsPage() {
           <button
             type="button"
             onClick={() => window.print()}
-            className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition"
+            className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition cursor-pointer"
             title="Export PDF"
             aria-label="Export PDF"
           >
@@ -398,7 +446,7 @@ function ProductsPage() {
           <button
             type="button"
             onClick={() => alert.success("Excel export generated.")}
-            className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition"
+            className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
             title="Export Excel"
             aria-label="Export Excel"
           >
@@ -410,7 +458,7 @@ function ProductsPage() {
             type="button"
             disabled={isRefreshing}
             onClick={() => loadProducts(appliedFilters, true)}
-            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition"
+            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
             title="Refresh List"
             aria-label="Refresh List"
           >
@@ -432,7 +480,7 @@ function ProductsPage() {
             <button
               type="button"
               onClick={() => openCreateForm()}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95 cursor-pointer"
             >
               <Icon name="plus-circle" className="size-4" />
               <span>Add Product</span>
@@ -443,7 +491,7 @@ function ProductsPage() {
           <button
             type="button"
             onClick={() => alert.info("Import feature ready for CSV/Excel uploads.")}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0E2040] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-slate-900/20 transition-all hover:bg-[#19325C] active:scale-95"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0E2040] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-slate-900/20 transition-all hover:bg-[#19325C] active:scale-95 cursor-pointer"
           >
             <Icon name="download" className="size-4" />
             <span>Import Product</span>
@@ -557,7 +605,7 @@ function ProductsPage() {
               type="button"
               disabled={pagination.page <= 1}
               onClick={() => changePage(pagination.page - 1)}
-              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition"
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
               aria-label="Previous Page"
             >
               ‹
@@ -569,7 +617,7 @@ function ProductsPage() {
                 key={pageNum}
                 type="button"
                 onClick={() => changePage(pageNum)}
-                className={`grid size-8 place-items-center rounded-lg text-xs font-bold transition ${
+                className={`grid size-8 place-items-center rounded-lg text-xs font-bold transition cursor-pointer ${
                   pagination.page === pageNum
                     ? "bg-[#FF9F43] text-white shadow-xs"
                     : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -585,7 +633,7 @@ function ProductsPage() {
                 <button
                   type="button"
                   onClick={() => changePage(pagination.total_pages)}
-                  className={`grid size-8 place-items-center rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+                  className={`grid size-8 place-items-center rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer`}
                 >
                   {pagination.total_pages}
                 </button>
@@ -597,7 +645,7 @@ function ProductsPage() {
               type="button"
               disabled={pagination.page >= pagination.total_pages}
               onClick={() => changePage(pagination.page + 1)}
-              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition"
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
               aria-label="Next Page"
             >
               ›
@@ -605,37 +653,6 @@ function ProductsPage() {
           </div>
         </div>
       </section>
-
-      {/* CREATE / EDIT MODAL */}
-      <Modal
-        isOpen={formMode !== null}
-        title={formMode === "edit" ? "Edit Product" : "Add Product"}
-        description={
-          formMode === "edit"
-            ? "Update product details, pricing, and stock."
-            : "Add a new product to the shop catalogue."
-        }
-        onClose={closeForm}
-        size="lg"
-      >
-        <ProductForm
-          values={formValues}
-          errors={formErrors}
-          canViewCosts={canViewCosts}
-          isEdit={formMode === "edit"}
-          categories={categories}
-          units={units}
-          imagePreview={imagePreview}
-          isSubmitting={isSubmitting}
-          submitLabel={formMode === "edit" ? "Save Changes" : "Add Product"}
-          onChange={handleFormChange}
-          onImageChange={handleImageChange}
-          onRemoveImage={removeImage}
-          onSubmit={handleSubmit}
-          onCancel={closeForm}
-          onGenerateBarcode={handleGenerateBarcode}
-        />
-      </Modal>
 
       {/* DETAILS MODAL */}
       <Modal

@@ -14,7 +14,8 @@ const shiftMap = {
 };
 
 function normalizeBarcode(scanned) {
-  return scanned.split('').map(c => shiftMap[c] || c).join('');
+  if (!scanned || typeof scanned !== "string") return "";
+  return scanned.split("").map((c) => shiftMap[c] || c).join("");
 }
 
 export default function useGlobalBarcodeScanner(onScan) {
@@ -28,14 +29,14 @@ export default function useGlobalBarcodeScanner(onScan) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ignore modifier keys
+      // Guard against events without key property or modifier combos
+      if (!e || typeof e.key !== "string") return;
       if (e.ctrlKey || e.altKey || e.metaKey) return;
 
       const now = Date.now();
       const gap = now - lastKeyTime.current;
 
       // Gap > 50ms between chars = human typing, not a scanner burst.
-      // BC-9000G sends chars at ~5ms intervals.
       if (gap > 50) {
         buffer.current = "";
       }
@@ -45,10 +46,12 @@ export default function useGlobalBarcodeScanner(onScan) {
       if (e.key === "Enter") {
         const scanned = normalizeBarcode(buffer.current);
         buffer.current = "";
-        if (scanned.length >= 3) {
+        if (scanned && scanned.length >= 3) {
           // Valid scan — fire callback and stop the Enter from submitting a form
           e.preventDefault();
-          onScanRef.current(scanned);
+          if (typeof onScanRef.current === "function") {
+            onScanRef.current(scanned);
+          }
         }
       } else if (e.key.length === 1) {
         buffer.current += e.key;

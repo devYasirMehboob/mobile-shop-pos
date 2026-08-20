@@ -1,14 +1,14 @@
 export default function normalizeApiError(error) {
   const requestId = error.response?.headers?.['x-request-id'] || error.response?.data?.request_id || 'sys';
 
-  // If it's not an axios error, or has no response, it's likely a network error or crash
+  // If it's a direct JS/Supabase error
   if (!error.response) {
     return {
-      type: 'network',
-      message: `The local server is unavailable. Check Apache and MySQL.\nReference: ${requestId}`,
+      type: 'error',
+      message: error?.message || 'An unexpected error occurred.',
       fieldErrors: {},
       status: 0,
-      code: 'NETWORK_ERROR',
+      code: error?.code || 'ERROR',
       requestId,
     };
   }

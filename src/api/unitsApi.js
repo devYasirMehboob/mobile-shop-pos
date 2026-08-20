@@ -1,6 +1,16 @@
 import apiClient from "./apiClient";
 import supabase, { isSupabaseConfigured } from "./supabaseClient";
 
+function sanitizeUnitForDb(raw) {
+  return {
+    name: raw.name?.trim(),
+    symbol: raw.symbol?.trim(),
+    unit_type: raw.unit_type || "count",
+    precision: parseInt(raw.precision, 10) || 0,
+    status: raw.status || "active",
+  };
+}
+
 export async function getUnits(params = {}) {
   if (isSupabaseConfigured()) {
     let query = supabase.from("units").select("*").order("name", { ascending: true });
@@ -27,7 +37,8 @@ export async function getUnit(id) {
 
 export async function createUnit(data) {
   if (isSupabaseConfigured()) {
-    const { data: newUnit, error } = await supabase.from("units").insert([data]).select().single();
+    const payload = sanitizeUnitForDb(data);
+    const { data: newUnit, error } = await supabase.from("units").insert([payload]).select().single();
     if (error) throw new Error(error.message);
     return newUnit;
   }
@@ -38,7 +49,8 @@ export async function createUnit(data) {
 
 export async function updateUnit(id, data) {
   if (isSupabaseConfigured()) {
-    const { data: updated, error } = await supabase.from("units").update(data).eq("id", id).select().single();
+    const payload = sanitizeUnitForDb(data);
+    const { data: updated, error } = await supabase.from("units").update(payload).eq("id", id).select().single();
     if (error) throw new Error(error.message);
     return updated;
   }

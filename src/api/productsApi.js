@@ -63,11 +63,43 @@ export async function getProduct(id) {
   return response.data.data.product;
 }
 
+function sanitizeProductForDb(raw) {
+  const {
+    image_data,
+    remove_image,
+    categories,
+    category_name,
+    ...rest
+  } = raw;
+
+  return {
+    ...rest,
+    category_id: Number(rest.category_id),
+    purchase_cost: parseFloat(rest.purchase_cost) || 0,
+    selling_price: parseFloat(rest.selling_price) || 0,
+    quantity: parseFloat(rest.quantity) || 0,
+    minimum_stock: parseFloat(rest.minimum_stock) || 0,
+    base_unit_id: rest.base_unit_id ? Number(rest.base_unit_id) : null,
+    default_purchase_unit_id: rest.default_purchase_unit_id ? Number(rest.default_purchase_unit_id) : null,
+    default_sale_unit_id: rest.default_sale_unit_id ? Number(rest.default_sale_unit_id) : null,
+    stock_source_id: rest.stock_source_id ? Number(rest.stock_source_id) : null,
+    consumption_quantity: rest.consumption_quantity ? parseFloat(rest.consumption_quantity) : null,
+    consumption_unit_id: rest.consumption_unit_id ? Number(rest.consumption_unit_id) : null,
+    consumption_quantity_base: rest.consumption_quantity_base ? parseFloat(rest.consumption_quantity_base) : null,
+    allow_custom_sale: rest.allow_custom_sale ? 1 : 0,
+    track_stock: rest.track_stock === false || rest.track_stock === 0 ? 0 : 1,
+    track_batches: rest.track_batches ? 1 : 0,
+    track_expiry: rest.track_expiry ? 1 : 0,
+    barcode: rest.barcode?.trim() || null,
+  };
+}
+
 export async function createProduct(productData) {
   if (isSupabaseConfigured()) {
+    const payload = sanitizeProductForDb(productData);
     const { data, error } = await supabase
       .from("products")
-      .insert([productData])
+      .insert([payload])
       .select()
       .single();
 
@@ -81,9 +113,10 @@ export async function createProduct(productData) {
 
 export async function updateProduct(id, productData) {
   if (isSupabaseConfigured()) {
+    const payload = sanitizeProductForDb(productData);
     const { data, error } = await supabase
       .from("products")
-      .update(productData)
+      .update(payload)
       .eq("id", id)
       .select()
       .single();

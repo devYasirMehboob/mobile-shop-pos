@@ -1,62 +1,43 @@
-import apiClient from "./apiClient";
-import supabase, { isSupabaseConfigured } from "./supabaseClient";
+import supabase from "./supabaseClient";
 
 export async function getCsrfToken() {
-  if (isSupabaseConfigured()) {
-    return "supabase-session-" + Math.random().toString(36).substring(2);
-  }
-  const response = await apiClient.get("/csrf-token");
-  return response.data.data.csrfToken;
+  return "pos-token-" + crypto.randomUUID();
 }
 
 export async function loginUser(email, password) {
-  if (isSupabaseConfigured()) {
-    // Call Supabase RPC function for direct secure authentication
-    const { data, error } = await supabase.rpc("verify_user_login_rpc", {
-      p_email: email,
-      p_password: password,
-    });
+  // Call Supabase RPC function for direct secure authentication
+  const { data, error } = await supabase.rpc("verify_user_login_rpc", {
+    p_email: email.trim().toLowerCase(),
+    p_password: password,
+  });
 
-    if (error) {
-      throw new Error(error.message || "Failed to authenticate with Supabase.");
-    }
-
-    if (!data?.success) {
-      throw new Error(data?.message || "Invalid email or password.");
-    }
-
-    // Save session in local storage
-    localStorage.setItem("mobile_pos_user", JSON.stringify(data.data.user));
-    return data.data;
+  if (error) {
+    throw new Error(error.message || "Failed to authenticate with Supabase database.");
   }
 
-  // If Supabase keys are not set in .env
-  throw new Error("Please enter your real VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env file.");
+  if (!data || !data.success) {
+    throw new Error(data?.message || "Invalid email or password. Access denied.");
+  }
+
+  // Save session in local storage
+  localStorage.setItem("mobile_pos_user", JSON.stringify(data.data.user));
+  return data.data;
 }
 
 export async function getCurrentUser() {
-  if (isSupabaseConfigured()) {
-    const cached = localStorage.getItem("mobile_pos_user");
-    if (cached) {
-      try {
-        return JSON.parse(cached);
-      } catch {
-        return null;
-      }
+  const cached = localStorage.getItem("mobile_pos_user");
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {
+      return null;
     }
-    return null;
   }
-
-  const response = await apiClient.get("/auth/me");
-  return response.data.data.user;
+  return null;
 }
 
 export async function logoutUser() {
-  if (isSupabaseConfigured()) {
-    localStorage.removeItem("mobile_pos_user");
-    await supabase.auth.signOut().catch(() => {});
-    return;
-  }
-
-  await apiClient.post("/auth/logout");
+  localStorage.removeItem("mobile_pos_user");
+  sessionStorage.removeItem("csrfToken");
+  await supabase.auth.signOut().catch(() => {});
 }

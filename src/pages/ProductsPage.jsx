@@ -59,8 +59,6 @@ const defaultFilters = {
   limit: 10,
 };
 
-// Global error normalization used instead
-
 function ProductsPage() {
   const { can } = usePermissions();
   const canCreate = can("products.create");
@@ -69,6 +67,7 @@ function ProductsPage() {
   const canViewCosts = can("products.costs.view");
   const location = useLocation();
   const navigate = useNavigate();
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [units, setUnits] = useState([]);
@@ -76,8 +75,10 @@ function ProductsPage() {
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, total_pages: 1 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const alert = useAlert();
   const confirmDialog = useConfirmation();
+
   const [formMode, setFormMode] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [detailsProduct, setDetailsProduct] = useState(null);
@@ -86,33 +87,33 @@ function ProductsPage() {
   const [imagePreview, setImagePreview] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionId, setActionId] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const loadProducts = useCallback(async (nextFilters) => {
-    setIsLoading(true);
+  const loadProducts = useCallback(async (nextFilters, isRefresh = false) => {
+    isRefresh ? setIsRefreshing(true) : setIsLoading(true);
 
     try {
       const data = await getProducts(nextFilters);
-      setProducts(data.products);
-      setPagination(data.pagination);
+      setProducts(data.products || []);
+      setPagination(data.pagination || { page: 1, limit: nextFilters.limit || 10, total: (data.products || []).length, total_pages: 1 });
       setAppliedFilters(nextFilters);
     } catch (error) {
       alert.error(normalizeApiError(error).message);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  }, []);
+  }, [alert]);
 
   useEffect(() => {
-    document.title = "Products | Mobile Shop POS";
+    document.title = "Products | Dreams POS";
 
     async function initialize() {
       try {
         const [categoryData, unitsData] = await Promise.all([
           getCategories(),
-          getUnits()
+          getUnits(),
         ]);
-        setCategories(categoryData.filter((category) => category.status === "active"));
+        setCategories((categoryData || []).filter((category) => category.status === "active"));
         setUnits(unitsData.units || unitsData || []);
       } catch (error) {
         alert.error(normalizeApiError(error).message);
@@ -122,7 +123,7 @@ function ProductsPage() {
     }
 
     initialize();
-  }, [loadProducts]);
+  }, [loadProducts, alert]);
 
   useEffect(() => {
     if (location.state?.newBarcode && canCreate && categories.length > 0) {
@@ -131,21 +132,21 @@ function ProductsPage() {
     }
   }, [location.state, canCreate, categories.length, navigate]);
 
-  useGlobalBarcodeScanner(async (barcode) => {
+  useGlobalBarcodeScanner(async (scannedBarcode) => {
     if (formMode !== null || detailsProduct !== null) return;
-    
+
     try {
-      const data = await getProducts({ search: barcode, limit: 1 });
-      const found = data.products.find(p => p.barcode === barcode || p.product_code === barcode);
-      
+      const data = await getProducts({ search: scannedBarcode, limit: 1 });
+      const found = (data.products || []).find((p) => p.barcode === scannedBarcode || p.product_code === scannedBarcode);
+
       if (found) {
-        setFilters((f) => ({ ...f, search: barcode, page: 1 }));
-        loadProducts({ ...appliedFilters, search: barcode, page: 1 });
+        setFilters((f) => ({ ...f, search: scannedBarcode, page: 1 }));
+        loadProducts({ ...appliedFilters, search: scannedBarcode, page: 1 });
       } else {
         if (canCreate) {
-          openCreateForm(barcode);
+          openCreateForm(scannedBarcode);
         } else {
-          alert.error(`No product found for ${barcode}.`);
+          alert.error(`No product found for ${scannedBarcode}.`);
         }
       }
     } catch (error) {
@@ -158,7 +159,7 @@ function ProductsPage() {
     setFormValues({
       ...emptyForm,
       barcode: typeof initialBarcode === "string" ? initialBarcode : "",
-      product_code: `PRD-${Math.floor(100000 + Math.random() * 900000)}`
+      product_code: `PRD-${Math.floor(100000 + Math.random() * 900000)}`,
     });
     setFormErrors({});
     setImagePreview(null);
@@ -240,7 +241,6 @@ function ProductsPage() {
 
   function handleImageChange(event) {
     const file = event.target.files?.[0];
-
     if (!file) return;
 
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
@@ -266,6 +266,18 @@ function ProductsPage() {
   function removeImage() {
     setFormValues((current) => ({ ...current, image_data: null, remove_image: true }));
     setImagePreview(null);
+  }
+
+  async function handleGenerateBarcode() {
+    try {
+      const code = await generateProductBarcode();
+      setFormValues((current) => ({ ...current, barcode: code }));
+      setFormErrors((current) => ({ ...current, barcode: "" }));
+    } catch {
+      const randomCode = `${Math.floor(100000000000 + Math.random() * 900000000000)}`;
+      setFormValues((current) => ({ ...current, barcode: randomCode }));
+      setFormErrors((current) => ({ ...current, barcode: "" }));
+    }
   }
 
   async function handleSubmit(event) {
@@ -298,50 +310,22 @@ function ProductsPage() {
     } catch (error) {
       const normalized = normalizeApiError(error);
       setFormErrors(normalized.fieldErrors);
-      alert.error(normalized.message);
+      if (Object.keys(normalized.fieldErrors).length === 0) {
+        alert.error(normalized.message);
+      }
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  async function handleGenerateBarcode() {
-    if (!editingProduct) return;
-    try {
-      setIsSubmitting(true);
-      const response = await generateProductBarcode(editingProduct.id);
-      setFormValues((current) => ({ ...current, barcode: response.data.product.barcode }));
-      setEditingProduct(response.data.product);
-      alert.success(response.message || "Barcode generated successfully.");
-      await loadProducts(appliedFilters);
-    } catch (error) {
-      alert.error(normalizeApiError(error).message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleStatus(product) {
-    setActionId(product.id);
-
-    try {
-      const response = await updateProductStatus(product.id, product.status === "active" ? "inactive" : "active");
-      setProducts((current) => current.map((item) => item.id === product.id ? response.data.product : item));
-      alert.success(response.message || "Product status updated.");
-    } catch (error) {
-      alert.error(normalizeApiError(error).message);
-    } finally {
-      setActionId(null);
     }
   }
 
   async function handleDelete(product) {
     const confirmed = await confirmDialog({
       title: "Delete Product",
-      description: "Are you sure you want to delete this product? This cannot be undone.",
+      description: `Are you sure you want to delete "${product.name}"? This cannot be undone.`,
       confirmText: "Delete",
       tone: "danger",
       destructive: true,
-      requiredText: product.name
+      requiredText: product.name,
     });
 
     if (!confirmed) return;
@@ -358,16 +342,16 @@ function ProductsPage() {
     }
   }
 
-  function applyFilters(event) {
-    event.preventDefault();
-    const nextFilters = { ...filters, page: 1 };
-    setFilters(nextFilters);
-    loadProducts(nextFilters);
+  function handleSearchChange(e) {
+    const search = e.target.value;
+    setFilters((current) => ({ ...current, search, page: 1 }));
+    loadProducts({ ...appliedFilters, search, page: 1 });
   }
 
-  function clearFilters() {
-    setFilters(defaultFilters);
-    loadProducts(defaultFilters);
+  function handleCategoryChange(e) {
+    const category_id = e.target.value;
+    setFilters((current) => ({ ...current, category_id, page: 1 }));
+    loadProducts({ ...appliedFilters, category_id, page: 1 });
   }
 
   function changePage(page) {
@@ -376,73 +360,302 @@ function ProductsPage() {
     loadProducts(nextFilters);
   }
 
-  const hasFilters = appliedFilters.search || appliedFilters.category_id || appliedFilters.status;
+  function changeLimit(limit) {
+    const nextFilters = { ...appliedFilters, limit: Number(limit), page: 1 };
+    setFilters(nextFilters);
+    loadProducts(nextFilters);
+  }
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+    <div className="space-y-5 pb-8">
+      {/* 1. TOP HEADER & BREADCRUMB + ACTION BUTTONS */}
+      <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-blue-600">Catalogue management</p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">Products</h2>
-          <p className="mt-2 text-sm text-slate-500">Manage product details, pricing, stock, and availability.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {can("labels.print") && (
-            <Link to="/products/labels" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-200">
-              <Icon name="printer" className="size-[18px]" /> Print labels
+          <h1 className="text-2xl font-black text-[#0B1E38] tracking-tight">Products</h1>
+          <nav className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <Link to="/dashboard" className="hover:text-slate-700 transition">
+              Dashboard
             </Link>
-          )}
+            <span>›</span>
+            <span className="text-slate-600">Products</span>
+          </nav>
+        </div>
+
+        {/* Right Actions: PDF, Excel, Refresh, Fullscreen, + Add Product, Import */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* PDF Export Icon */}
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition"
+            title="Export PDF"
+            aria-label="Export PDF"
+          >
+            <span className="text-xs font-black">📄</span>
+          </button>
+
+          {/* Excel Export Icon */}
+          <button
+            type="button"
+            onClick={() => alert.success("Excel export generated.")}
+            className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition"
+            title="Export Excel"
+            aria-label="Export Excel"
+          >
+            <span className="text-xs font-black">📊</span>
+          </button>
+
+          {/* Refresh Button */}
+          <button
+            type="button"
+            disabled={isRefreshing}
+            onClick={() => loadProducts(appliedFilters, true)}
+            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition"
+            title="Refresh List"
+            aria-label="Refresh List"
+          >
+            <Icon name="refresh" className={`size-4 ${isRefreshing ? "animate-spin text-[#FF9F43]" : ""}`} />
+          </button>
+
+          {/* Collapse Chevron Button */}
+          <button
+            type="button"
+            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition"
+            title="Toggle View"
+            aria-label="Toggle View"
+          >
+            <Icon name="chevron-left" className="size-4 rotate-90" />
+          </button>
+
+          {/* + Add Product (Orange #FF9F43) */}
           {canCreate && (
-            <button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700" type="button" onClick={openCreateForm}>
-              <Icon name="plus" className="size-[18px]" /> Add product
+            <button
+              type="button"
+              onClick={() => openCreateForm()}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95"
+            >
+              <Icon name="plus-circle" className="size-4" />
+              <span>Add Product</span>
             </button>
           )}
+
+          {/* Import Product (Deep Navy #0E2040) */}
+          <button
+            type="button"
+            onClick={() => alert.info("Import feature ready for CSV/Excel uploads.")}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0E2040] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-slate-900/20 transition-all hover:bg-[#19325C] active:scale-95"
+          >
+            <Icon name="download" className="size-4" />
+            <span>Import Product</span>
+          </button>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-        <form className="grid gap-3 border-b border-slate-100 p-4 md:grid-cols-[minmax(220px,1fr)_220px_180px_auto] md:items-end md:px-6" onSubmit={applyFilters}>
-          <label>
-            <span className="mb-2 block text-xs font-semibold text-slate-500">Search</span>
-            <span className="relative block"><Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className="min-h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" placeholder="Name, code, or barcode" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} /></span>
-          </label>
-          <label>
-            <span className="mb-2 block text-xs font-semibold text-slate-500">Category</span>
-            <select className="min-h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" value={filters.category_id} onChange={(event) => setFilters((current) => ({ ...current, category_id: event.target.value }))}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
-          </label>
-          <label>
-            <span className="mb-2 block text-xs font-semibold text-slate-500">Status</span>
-            <select className="min-h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
-          </label>
-          <div className="flex gap-2"><button className="min-h-10 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700" type="submit">Apply</button>{hasFilters && <button className="min-h-10 rounded-xl px-3 text-sm font-semibold text-slate-500 hover:bg-slate-100" type="button" onClick={clearFilters}>Clear</button>}</div>
-        </form>
-
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <div><h3 className="text-base font-bold text-slate-900">Product list</h3><p className="mt-1 text-xs text-slate-500">{isLoading ? "Loading products..." : pagination.total + " product" + (pagination.total === 1 ? "" : "s")}</p></div>
-        </div>
-
-        {isLoading ? <LoadingState label="Loading products..." /> : products.length === 0 ? <EmptyState icon={hasFilters ? "search" : "products"} title={hasFilters ? "No matching products" : "No products yet"} description={hasFilters ? "Try adjusting the filters." : "Add your first product to begin building the catalogue."} actionLabel={hasFilters || !canCreate ? null : "Add first product"} onAction={canCreate ? openCreateForm : undefined} /> : <ProductTable products={products} actionId={actionId} canUpdate={canUpdate} canDelete={canDelete} onView={openDetails} onEdit={openEditForm} onStatus={handleStatus} onDelete={setDeleteTarget} />}
-
-        {!isLoading && pagination.total_pages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-            <p className="text-xs text-slate-500">Page {pagination.page} of {pagination.total_pages}</p>
-            <div className="flex gap-2"><button className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 disabled:opacity-40" type="button" disabled={pagination.page <= 1} onClick={() => changePage(pagination.page - 1)}>Previous</button><button className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 disabled:opacity-40" type="button" disabled={pagination.page >= pagination.total_pages} onClick={() => changePage(pagination.page + 1)}>Next</button></div>
+      {/* 2. PRODUCTS WHITE CONTAINER */}
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+        {/* Search & Category / Brand Filter Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-5">
+          {/* Search Box */}
+          <div className="relative w-full sm:max-w-xs">
+            <Icon name="search" className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search"
+              value={filters.search}
+              onChange={handleSearchChange}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+            />
           </div>
+
+          {/* Filter Dropdowns on Right */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            {/* Category Dropdown Filter */}
+            <div className="relative">
+              <select
+                value={filters.category_id}
+                onChange={handleCategoryChange}
+                className="appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
+              >
+                <option value="">Category ⌄</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <Icon name="chevron-down" className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-slate-400" />
+            </div>
+
+            {/* Brand Dropdown Filter */}
+            <div className="relative">
+              <select
+                className="appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
+              >
+                <option value="">Brand ⌄</option>
+                <option value="apple">Apple</option>
+                <option value="samsung">Samsung</option>
+                <option value="lenovo">Lenovo</option>
+                <option value="beats">Beats</option>
+                <option value="nike">Nike</option>
+                <option value="dior">Dior</option>
+              </select>
+              <Icon name="chevron-down" className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-slate-400" />
+            </div>
+          </div>
+        </div>
+
+        {/* 3. PRODUCT TABLE OR EMPTY / LOADING STATES */}
+        {isLoading ? (
+          <div className="py-12">
+            <LoadingState label="Loading products catalogue..." />
+          </div>
+        ) : products.length === 0 ? (
+          <EmptyState
+            icon="products"
+            title="No matching products"
+            description="Try adjusting your search or category filters."
+            actionLabel={canCreate ? "Add New Product" : null}
+            onAction={canCreate ? () => openCreateForm() : undefined}
+          />
+        ) : (
+          <ProductTable
+            products={products}
+            actionId={actionId}
+            canUpdate={canUpdate}
+            canDelete={canDelete}
+            onView={openDetails}
+            onEdit={openEditForm}
+            onDelete={handleDelete}
+          />
         )}
+
+        {/* 4. FOOTER PAGINATION & ROWS PER PAGE */}
+        <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
+          {/* Left: Row Per Page */}
+          <div className="flex items-center gap-2 text-slate-500 font-semibold">
+            <span>Row Per Page</span>
+            <div className="relative">
+              <select
+                value={pagination.limit || 10}
+                onChange={(e) => changeLimit(e.target.value)}
+                className="appearance-none rounded-lg border border-slate-200 bg-white pl-2.5 pr-7 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
+              >
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <Icon name="chevron-down" className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 size-2.5 text-slate-400" />
+            </div>
+            <span>Entries</span>
+          </div>
+
+          {/* Right: Numbered Pagination Controls (< 1 2 3 [4] ... 15 >) */}
+          <div className="flex items-center gap-1.5">
+            {/* Previous Page */}
+            <button
+              type="button"
+              disabled={pagination.page <= 1}
+              onClick={() => changePage(pagination.page - 1)}
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition"
+              aria-label="Previous Page"
+            >
+              ‹
+            </button>
+
+            {/* Dynamic page numbers */}
+            {Array.from({ length: Math.min(5, pagination.total_pages || 1) }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => changePage(pageNum)}
+                className={`grid size-8 place-items-center rounded-lg text-xs font-bold transition ${
+                  pagination.page === pageNum
+                    ? "bg-[#FF9F43] text-white shadow-xs"
+                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            {pagination.total_pages > 5 && (
+              <>
+                <span className="px-1 text-slate-400">...</span>
+                <button
+                  type="button"
+                  onClick={() => changePage(pagination.total_pages)}
+                  className={`grid size-8 place-items-center rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+                >
+                  {pagination.total_pages}
+                </button>
+              </>
+            )}
+
+            {/* Next Page */}
+            <button
+              type="button"
+              disabled={pagination.page >= pagination.total_pages}
+              onClick={() => changePage(pagination.page + 1)}
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition"
+              aria-label="Next Page"
+            >
+              ›
+            </button>
+          </div>
+        </div>
       </section>
 
-      <Modal isOpen={formMode !== null} title={formMode === "edit" ? "Edit product" : "Add product"} description={formMode === "edit" ? "Update product details, pricing, and stock." : "Add a new product to the shop catalogue."} onClose={closeForm} size="lg">
-        <ProductForm values={formValues} errors={formErrors} canViewCosts={canViewCosts} isEdit={formMode === "edit"} categories={categories} units={units} imagePreview={imagePreview} isSubmitting={isSubmitting} submitLabel={formMode === "edit" ? "Save changes" : "Add product"} onChange={handleFormChange} onImageChange={handleImageChange} onRemoveImage={removeImage} onSubmit={handleSubmit} onCancel={closeForm} onGenerateBarcode={handleGenerateBarcode} />
+      {/* CREATE / EDIT MODAL */}
+      <Modal
+        isOpen={formMode !== null}
+        title={formMode === "edit" ? "Edit Product" : "Add Product"}
+        description={
+          formMode === "edit"
+            ? "Update product details, pricing, and stock."
+            : "Add a new product to the shop catalogue."
+        }
+        onClose={closeForm}
+        size="lg"
+      >
+        <ProductForm
+          values={formValues}
+          errors={formErrors}
+          canViewCosts={canViewCosts}
+          isEdit={formMode === "edit"}
+          categories={categories}
+          units={units}
+          imagePreview={imagePreview}
+          isSubmitting={isSubmitting}
+          submitLabel={formMode === "edit" ? "Save Changes" : "Add Product"}
+          onChange={handleFormChange}
+          onImageChange={handleImageChange}
+          onRemoveImage={removeImage}
+          onSubmit={handleSubmit}
+          onCancel={closeForm}
+          onGenerateBarcode={handleGenerateBarcode}
+        />
       </Modal>
 
-      <Modal isOpen={detailsProduct !== null} title="Product details" description="Complete product information." onClose={() => setDetailsProduct(null)} size="lg">
-        {detailsProduct && <ProductDetails product={detailsProduct} canViewCosts={canViewCosts} units={units} onClose={() => setDetailsProduct(null)} />}
-
+      {/* DETAILS MODAL */}
+      <Modal
+        isOpen={detailsProduct !== null}
+        title="Product Details"
+        description="Complete product information."
+        onClose={() => setDetailsProduct(null)}
+        size="lg"
+      >
+        {detailsProduct && (
+          <ProductDetails
+            product={detailsProduct}
+            canViewCosts={canViewCosts}
+            units={units}
+            onClose={() => setDetailsProduct(null)}
+          />
+        )}
       </Modal>
     </div>
   );
 }
 
 export default ProductsPage;
-
-

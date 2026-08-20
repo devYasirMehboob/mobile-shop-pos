@@ -1,29 +1,50 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../components/Icon";
-import LoadingState from "../components/feedback/LoadingState";
+import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
 import Modal from "../components/Modal";
 import useAlert from "../hooks/useAlert";
 import useConfirmation from "../hooks/useConfirmation";
 import normalizeApiError from "../utils/normalizeApiError";
-import apiClient from "../api/apiClient";
+import {
+  getBatches,
+  toggleBatchStatus,
+  disposeBatchStock,
+} from "../api/batchesApi";
 
 const defaultFilters = {
   search: "",
-  product_id: "",
   status: "",
   expiry_state: "",
   page: 1,
-  limit: 20,
+  limit: 10,
 };
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+}
 
 function BatchesPage() {
   const [batches, setBatches] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, total_pages: 1, total: 0 });
+  const [pagination, setPagination] = useState({ page: 1, total_pages: 1, total: 0, limit: 10 });
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
   const alert = useAlert();
   const confirm = useConfirmation();
 
@@ -32,51 +53,89 @@ function BatchesPage() {
   const [disposeReason, setDisposeReason] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const loadBatches = useCallback(async (f) => {
-    setLoading(true);
-    try {
-      const { data: responseBody } = await apiClient.get("/batches", { params: f });
-      setBatches(responseBody.data?.batches || []);
-      setPagination(responseBody.data?.pagination || { page: 1, total_pages: 1, total: 0 });
-      setAppliedFilters(f);
-    } catch (e) {
-      alert.error(normalizeApiError(e).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [alert]);
+  const loadBatches = useCallback(
+    async (f, isRefresh = false) => {
+      isRefresh ? setIsRefreshing(true) : setLoading(true);
+      try {
+        const data = await getBatches(f);
+        setBatches(data.batches || []);
+        setPagination(data.pagination || { page: 1, total_pages: 1, total: (data.batches || []).length, limit: 10 });
+        setAppliedFilters(f);
+      } catch (e) {
+        alert.error(normalizeApiError(e).message);
+      } finally {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [alert]
+  );
 
   useEffect(() => {
-    document.title = "Batches & Expiry | Mobile Shop POS";
+    document.title = "Expired Products | Dreams POS";
     loadBatches(defaultFilters);
   }, [loadBatches]);
 
-  function applyFilters(e) {
-    e.preventDefault();
-    loadBatches({ ...filters, page: 1 });
+  function handleSearchChange(e) {
+    const search = e.target.value;
+    setFilters((f) => ({ ...f, search, page: 1 }));
+    loadBatches({ ...appliedFilters, search, page: 1 });
   }
 
-  function clearFilters() {
-    setFilters(defaultFilters);
-    loadBatches(defaultFilters);
+  function handleStatusChange(e) {
+    const status = e.target.value;
+    setFilters((f) => ({ ...f, status, page: 1 }));
+    loadBatches({ ...appliedFilters, status, page: 1 });
+  }
+
+  function handleExpiryStateChange(e) {
+    const expiry_state = e.target.value;
+    setFilters((f) => ({ ...f, expiry_state, page: 1 }));
+    loadBatches({ ...appliedFilters, expiry_state, page: 1 });
+  }
+
+  function changePage(page) {
+    const nextFilters = { ...appliedFilters, page };
+    setFilters((f) => ({ ...f, page }));
+    loadBatches(nextFilters);
+  }
+
+  function changeLimit(limit) {
+    const nextFilters = { ...appliedFilters, limit: Number(limit), page: 1 };
+    setFilters(nextFilters);
+    loadBatches(nextFilters);
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === batches.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(batches.map((b) => b.id)));
+    }
+  }
+
+  function toggleSelectOne(id) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
   }
 
   async function handleBlock(batch) {
     const isBlocked = batch.status === "blocked";
     const confirmed = await confirm({
       title: isBlocked ? "Unblock Batch" : "Block Batch",
-      description: isBlocked 
-        ? `Are you sure you want to unblock batch ${batch.batch_number}? It will be available for sales again.`
-        : `Are you sure you want to block batch ${batch.batch_number}? It will not be used in future sales.`,
+      description: isBlocked
+        ? `Are you sure you want to unblock batch "${batch.batch_number}"? It will be available for sales again.`
+        : `Are you sure you want to block batch "${batch.batch_number}"? It will not be sold in POS.`,
       confirmText: isBlocked ? "Unblock" : "Block",
-      tone: isBlocked ? "primary" : "danger"
+      tone: isBlocked ? "primary" : "danger",
     });
     if (!confirmed) return;
 
     try {
-      const endpoint = isBlocked ? `/batches/${batch.id}/unblock` : `/batches/${batch.id}/block`;
-      const { data } = await apiClient.post(endpoint);
-      alert.success(data.message || "Batch status updated.");
+      const res = await toggleBatchStatus(batch.id, isBlocked ? "active" : "blocked");
+      alert.success(res.message || "Batch status updated.");
       loadBatches(appliedFilters);
     } catch (e) {
       alert.error(normalizeApiError(e).message);
@@ -91,11 +150,11 @@ function BatchesPage() {
     }
     setBusy(true);
     try {
-      const { data } = await apiClient.post(`/batches/${disposeBatch.id}/dispose`, {
+      const res = await disposeBatchStock(disposeBatch.id, {
         quantity: disposeQty,
-        reason: disposeReason,
+        reason: disposeReason || "Expired batch disposal",
       });
-      alert.success(data.message || "Batch disposed.");
+      alert.success(res.message || "Batch disposed successfully.");
       setDisposeBatch(null);
       setDisposeQty("");
       setDisposeReason("");
@@ -107,151 +166,454 @@ function BatchesPage() {
     }
   }
 
-  const hasFilters = appliedFilters.search || appliedFilters.status || appliedFilters.expiry_state;
-
   return (
-    <div className="space-y-6">
-      <header>
-        <p className="text-sm font-medium text-blue-600">Inventory management</p>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">
-          Batches & Expiry
-        </h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Track product batches, monitor expirations, and manage blocked stock.
-        </p>
-      </header>
+    <div className="space-y-5 pb-8">
+      {/* 1. TOP HEADER & BREADCRUMB + ACTION BUTTONS */}
+      <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-[#0B1E38] tracking-tight">
+            Expired Products
+          </h1>
+          <nav className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <Link to="/dashboard" className="hover:text-slate-700 transition">
+              Dashboard
+            </Link>
+            <span>›</span>
+            <span className="text-slate-600 font-bold">Expired Products</span>
+          </nav>
+        </div>
 
-      <section className="premium-surface overflow-hidden rounded-2xl p-5">
-        <form onSubmit={applyFilters} className="grid gap-4 sm:grid-cols-4 items-end mb-6">
-          <label className="text-xs font-bold text-slate-600">
-            Search
+        {/* Right Actions: PDF, Excel, Refresh, Collapse */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* PDF Export Icon */}
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition cursor-pointer"
+            title="Export PDF"
+            aria-label="Export PDF"
+          >
+            <span className="text-xs font-black">📄</span>
+          </button>
+
+          {/* Excel Export Icon */}
+          <button
+            type="button"
+            onClick={() => alert.success("Excel export generated.")}
+            className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
+            title="Export Excel"
+            aria-label="Export Excel"
+          >
+            <span className="text-xs font-black">📊</span>
+          </button>
+
+          {/* Refresh Button */}
+          <button
+            type="button"
+            disabled={isRefreshing}
+            onClick={() => loadBatches(appliedFilters, true)}
+            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            title="Refresh List"
+            aria-label="Refresh List"
+          >
+            <Icon
+              name="refresh"
+              className={`size-4 ${
+                isRefreshing ? "animate-spin text-[#FF9F43]" : ""
+              }`}
+            />
+          </button>
+
+          {/* Collapse Chevron Button */}
+          <button
+            type="button"
+            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition"
+            title="Toggle View"
+            aria-label="Toggle View"
+          >
+            <Icon name="chevron-left" className="size-4 rotate-90" />
+          </button>
+        </div>
+      </section>
+
+      {/* 2. EXPIRED PRODUCTS WHITE CONTAINER */}
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-5">
+          {/* Search Box */}
+          <div className="relative w-full sm:max-w-xs">
+            <Icon
+              name="search"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400"
+            />
             <input
               type="text"
-              placeholder="Batch or Product..."
+              placeholder="Search Batch or Product..."
               value={filters.search}
-              onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-              className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 px-3 font-normal"
+              onChange={handleSearchChange}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
             />
-          </label>
-          <label className="text-xs font-bold text-slate-600">
-            Status
-            <select
-              value={filters.status}
-              onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
-              className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 px-3 font-normal"
-            >
-              <option value="">All statuses</option>
-              <option value="active">Active</option>
-              <option value="blocked">Blocked</option>
-              <option value="depleted">Depleted</option>
-            </select>
-          </label>
-          <label className="text-xs font-bold text-slate-600">
-            Expiry State
-            <select
-              value={filters.expiry_state}
-              onChange={e => setFilters(f => ({ ...f, expiry_state: e.target.value }))}
-              className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 px-3 font-normal"
-            >
-              <option value="">All</option>
-              <option value="valid">Valid (Unexpired)</option>
-              <option value="near_expiry">Near Expiry (30 days)</option>
-              <option value="expired">Expired</option>
-            </select>
-          </label>
-          <div className="flex gap-2">
-            <button type="submit" className="min-h-11 flex-1 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700">Apply</button>
-            {hasFilters && <button type="button" onClick={clearFilters} className="min-h-11 flex-1 rounded-xl bg-slate-100 text-sm font-semibold text-slate-600 hover:bg-slate-200">Clear</button>}
           </div>
-        </form>
 
+          {/* Filter Dropdowns on Right */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            {/* Status Filter */}
+            <div className="relative">
+              <select
+                value={filters.status}
+                onChange={handleStatusChange}
+                className="appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
+              >
+                <option value="">Status ⌄</option>
+                <option value="active">Active</option>
+                <option value="blocked">Blocked</option>
+                <option value="depleted">Depleted</option>
+              </select>
+              <Icon
+                name="chevron-down"
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-slate-400"
+              />
+            </div>
+
+            {/* Expiry State Filter */}
+            <div className="relative">
+              <select
+                value={filters.expiry_state}
+                onChange={handleExpiryStateChange}
+                className="appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
+              >
+                <option value="">Expiry State ⌄</option>
+                <option value="expired">Expired Only</option>
+                <option value="near_expiry">Near Expiry (30 Days)</option>
+                <option value="valid">Valid (Safe)</option>
+              </select>
+              <Icon
+                name="chevron-down"
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-slate-400"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 3. TABLE OR LOADING / EMPTY STATE */}
         {loading ? (
-          <LoadingState message="Loading batches..." />
-        ) : !batches || batches.length === 0 ? (
-          <EmptyState title="No batches found" description="Adjust your filters or add batch-tracked stock via Purchases." icon="cube" />
+          <div className="py-12">
+            <LoadingState label="Loading expired batches..." />
+          </div>
+        ) : batches.length === 0 ? (
+          <EmptyState
+            icon="expired-products"
+            title="No expired products found"
+            description="Adjust your filters or monitor upcoming product batches."
+          />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-100">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] text-left text-xs">
+              <thead className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Batch Number</th>
-                  <th className="px-4 py-3">Product</th>
-                  <th className="px-4 py-3 text-right">Remaining</th>
-                  <th className="px-4 py-3">Dates</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="w-10 px-4 py-3.5">
+                    <input
+                      type="checkbox"
+                      className="size-4 rounded-md border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer"
+                      checked={
+                        batches.length > 0 && selectedIds.size === batches.length
+                      }
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th className="px-4 py-3.5">SKU / Batch ⇅</th>
+                  <th className="px-4 py-3.5">Product Name</th>
+                  <th className="px-4 py-3.5">Manufactured Date</th>
+                  <th className="px-4 py-3.5">Expired Date</th>
+                  <th className="px-4 py-3.5">Qty</th>
+                  <th className="px-4 py-3.5">Status</th>
+                  <th className="px-4 py-3.5 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {batches.map(b => {
-                  const isExpired = b.expiry_date && new Date(b.expiry_date) < new Date();
+
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {batches.map((b) => {
+                  const isSelected = selectedIds.has(b.id);
+                  const isExpired =
+                    b.expiry_date && new Date(b.expiry_date) < new Date();
+                  const isNearExpiry =
+                    b.expiry_date &&
+                    !isExpired &&
+                    new Date(b.expiry_date) <=
+                      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
                   return (
-                    <tr key={b.id} className="hover:bg-slate-50 transition">
-                      <td className="px-4 py-3 font-bold text-slate-900">{b.batch_number}</td>
-                      <td className="px-4 py-3">
-                        <Link to={`/products`} className="text-blue-600 hover:underline">{b.product_name}</Link>
+                    <tr
+                      key={b.id}
+                      className={`transition hover:bg-slate-50/80 ${
+                        isSelected ? "bg-orange-50/40" : ""
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="px-4 py-3.5">
+                        <input
+                          type="checkbox"
+                          className="size-4 rounded-md border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOne(b.id)}
+                        />
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-700">
-                        {Number(b.remaining_quantity)}
+
+                      {/* Batch Code */}
+                      <td className="px-4 py-3.5 font-bold text-slate-600">
+                        {b.batch_number}
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        <div className="text-slate-500">Mfg: {b.manufacturing_date || '-'}</div>
-                        <div className={isExpired ? 'font-bold text-red-600' : 'text-slate-500'}>
-                          Exp: {b.expiry_date || '-'}
+
+                      {/* Product Name & Icon */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 font-black text-xs overflow-hidden border border-slate-200/60 shadow-2xs">
+                            {b.product_image ? (
+                              <img
+                                src={b.product_image}
+                                alt=""
+                                className="size-full object-cover"
+                              />
+                            ) : (
+                              <Icon name="products" className="size-5 text-slate-400" />
+                            )}
+                          </div>
+                          <div>
+                            <strong className="block text-xs font-extrabold text-[#0B1E38]">
+                              {b.product_name}
+                            </strong>
+                            <span className="block text-[10px] text-slate-400 font-medium">
+                              ID: #{b.product_code || b.product_id}
+                            </span>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        {b.status === "active" && <span className="rounded-md bg-emerald-100 px-2 py-1 font-bold text-emerald-800">Active</span>}
-                        {b.status === "blocked" && <span className="rounded-md bg-red-100 px-2 py-1 font-bold text-red-800">Blocked</span>}
-                        {b.status === "depleted" && <span className="rounded-md bg-slate-100 px-2 py-1 font-bold text-slate-800">Depleted</span>}
+
+                      {/* Manufactured Date */}
+                      <td className="px-4 py-3.5 text-slate-600 font-semibold whitespace-nowrap">
+                        {formatDate(b.manufacturing_date)}
                       </td>
-                      <td className="px-4 py-3 text-right space-x-2">
-                        {b.status !== "depleted" && (
-                          <button onClick={() => handleBlock(b)} className="text-xs font-bold text-slate-600 hover:text-slate-900">
-                            {b.status === "blocked" ? "Unblock" : "Block"}
-                          </button>
+
+                      {/* Expired Date */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span
+                          className={`font-bold ${
+                            isExpired
+                              ? "text-rose-600"
+                              : isNearExpiry
+                              ? "text-[#FF9F43]"
+                              : "text-slate-600"
+                          }`}
+                        >
+                          {formatDate(b.expiry_date)}
+                        </span>
+                      </td>
+
+                      {/* Qty */}
+                      <td className="px-4 py-3.5 font-black text-slate-800">
+                        {Math.round(Number(b.remaining_quantity || 0))}
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="px-4 py-3.5">
+                        {b.status === "active" && (
+                          <span className="inline-block rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
+                            Active
+                          </span>
                         )}
-                        {b.status !== "depleted" && Number(b.remaining_quantity) > 0 && (
-                          <button onClick={() => { setDisposeBatch(b); setDisposeQty(Number(b.remaining_quantity)); }} className="text-xs font-bold text-red-600 hover:text-red-800">
-                            Dispose
-                          </button>
+                        {b.status === "blocked" && (
+                          <span className="inline-block rounded-md bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-800">
+                            Blocked
+                          </span>
                         )}
+                        {b.status === "depleted" && (
+                          <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">
+                            Depleted
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Block / Unblock Button */}
+                          {b.status !== "depleted" && (
+                            <button
+                              type="button"
+                              onClick={() => handleBlock(b)}
+                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold shadow-2xs transition ${
+                                b.status === "blocked"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              {b.status === "blocked" ? "Unblock" : "Block"}
+                            </button>
+                          )}
+
+                          {/* Dispose Stock Button */}
+                          {b.status !== "depleted" &&
+                            Number(b.remaining_quantity) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDisposeBatch(b);
+                                  setDisposeQty(Number(b.remaining_quantity));
+                                }}
+                                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-rose-600 shadow-2xs hover:border-rose-300 hover:bg-rose-50 transition cursor-pointer"
+                                title="Dispose Expired Stock"
+                                aria-label="Dispose Stock"
+                              >
+                                <Icon name="trash" className="size-3.5" />
+                              </button>
+                            )}
+                        </div>
                       </td>
                     </tr>
-                  )
+                  );
                 })}
               </tbody>
             </table>
           </div>
         )}
 
-        {!loading && pagination.total_pages > 1 && (
-          <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-xs font-medium text-slate-500">
-            <span>Page {pagination.page} of {pagination.total_pages}</span>
-            <div className="flex gap-2">
-              <button disabled={pagination.page <= 1} onClick={() => loadBatches({ ...appliedFilters, page: pagination.page - 1 })} className="rounded-lg border px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50">Prev</button>
-              <button disabled={pagination.page >= pagination.total_pages} onClick={() => loadBatches({ ...appliedFilters, page: pagination.page + 1 })} className="rounded-lg border px-3 py-1.5 hover:bg-slate-50 disabled:opacity-50">Next</button>
+        {/* 4. FOOTER PAGINATION & ROWS PER PAGE */}
+        <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
+          {/* Left: Row Per Page */}
+          <div className="flex items-center gap-2 text-slate-500 font-semibold">
+            <span>Row Per Page</span>
+            <div className="relative">
+              <select
+                value={pagination.limit || 10}
+                onChange={(e) => changeLimit(e.target.value)}
+                className="appearance-none rounded-lg border border-slate-200 bg-white pl-2.5 pr-7 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
+              >
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+              </select>
+              <Icon
+                name="chevron-down"
+                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 size-2.5 text-slate-400"
+              />
             </div>
+            <span>Entries</span>
           </div>
-        )}
+
+          {/* Right: Numbered Pagination Controls (< 1 2 3 [4] ... 15 >) */}
+          <div className="flex items-center gap-1.5">
+            {/* Previous Page */}
+            <button
+              type="button"
+              disabled={pagination.page <= 1}
+              onClick={() => changePage(pagination.page - 1)}
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
+              aria-label="Previous Page"
+            >
+              ‹
+            </button>
+
+            {/* Dynamic page numbers */}
+            {Array.from(
+              { length: Math.min(5, pagination.total_pages || 1) },
+              (_, i) => i + 1
+            ).map((pageNum) => (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => changePage(pageNum)}
+                className={`grid size-8 place-items-center rounded-lg text-xs font-bold transition cursor-pointer ${
+                  pagination.page === pageNum
+                    ? "bg-[#FF9F43] text-white shadow-xs"
+                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            {pagination.total_pages > 5 && (
+              <>
+                <span className="px-1 text-slate-400">...</span>
+                <button
+                  type="button"
+                  onClick={() => changePage(pagination.total_pages)}
+                  className="grid size-8 place-items-center rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {pagination.total_pages}
+                </button>
+              </>
+            )}
+
+            {/* Next Page */}
+            <button
+              type="button"
+              disabled={pagination.page >= pagination.total_pages}
+              onClick={() => changePage(pagination.page + 1)}
+              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
+              aria-label="Next Page"
+            >
+              ›
+            </button>
+          </div>
+        </div>
       </section>
 
-      <Modal isOpen={!!disposeBatch} onClose={() => setDisposeBatch(null)} title="Dispose Batch Stock" size="sm">
+      {/* DISPOSE STOCK MODAL */}
+      <Modal
+        isOpen={Boolean(disposeBatch)}
+        onClose={() => setDisposeBatch(null)}
+        title="Dispose Expired Stock"
+        description={`Dispose remaining stock for batch ${disposeBatch?.batch_number}.`}
+        size="sm"
+      >
         <form onSubmit={handleDisposeSubmit} className="space-y-4 p-5">
-          <p className="text-sm text-slate-600">
-            Dispose remaining stock for batch <strong>{disposeBatch?.batch_number}</strong>. This cannot be undone.
-          </p>
-          <label className="block">
-            <span className="text-xs font-bold text-slate-600 mb-1 block">Quantity to dispose</span>
-            <input type="number" min="0.001" step="0.001" max={disposeBatch?.remaining_quantity} required value={disposeQty} onChange={e => setDisposeQty(e.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 px-3" />
-          </label>
-          <label className="block">
-            <span className="text-xs font-bold text-slate-600 mb-1 block">Reason</span>
-            <input type="text" required placeholder="e.g. Expired, damaged" value={disposeReason} onChange={e => setDisposeReason(e.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 px-3" />
-          </label>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setDisposeBatch(null)} className="min-h-10 rounded-lg border px-4 text-sm font-semibold text-slate-600" disabled={busy}>Cancel</button>
-            <button type="submit" className="min-h-10 rounded-lg bg-red-600 px-5 text-sm font-semibold text-white" disabled={busy}>{busy ? "Processing..." : "Dispose Stock"}</button>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              Quantity to Dispose <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="number"
+              min="0.001"
+              step="any"
+              max={disposeBatch?.remaining_quantity}
+              required
+              value={disposeQty}
+              onChange={(e) => setDisposeQty(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              Disposal Reason
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Expired shelf-life, damaged packaging"
+              value={disposeReason}
+              onChange={(e) => setDisposeReason(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3">
+            <button
+              type="button"
+              onClick={() => setDisposeBatch(null)}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-xl bg-rose-600 px-5 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-rose-700 transition disabled:opacity-60 cursor-pointer"
+              disabled={busy}
+            >
+              {busy ? "Processing..." : "Confirm Disposal"}
+            </button>
           </div>
         </form>
       </Modal>

@@ -1,4 +1,4 @@
-﻿import { useEffect } from "react";
+import { useEffect } from "react";
 
 function Modal({ isOpen, title, description, onClose, children, size = "md" }) {
   useEffect(() => {
@@ -19,10 +19,17 @@ function Modal({ isOpen, title, description, onClose, children, size = "md" }) {
 
   if (!isOpen) return null;
 
-  const widthClass = size === "sm" ? "max-w-md" : size === "lg" ? "max-w-4xl" : "max-w-xl";
+  const widthClass =
+    size === "sm"
+      ? "max-w-md"
+      : size === "lg"
+      ? "max-w-4xl"
+      : size === "xl"
+      ? "max-w-5xl"
+      : "max-w-xl";
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/35 backdrop-blur-[2px] p-4">
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
       <button
         className="absolute inset-0 cursor-default"
         type="button"
@@ -30,23 +37,38 @@ function Modal({ isOpen, title, description, onClose, children, size = "md" }) {
         onClick={onClose}
       />
       <section
-        className={"relative z-10 w-full " + widthClass + " rounded-xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.18)]"}
+        className={
+          "relative z-10 w-full " +
+          widthClass +
+          " rounded-2xl border border-slate-200/90 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.18)] transition-all overflow-hidden"
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
-        <header className="flex items-start gap-4 border-b border-slate-100 px-6 py-5">
+        <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div className="min-w-0 flex-1">
-            <h2 id="modal-title" className="text-lg font-bold text-slate-900">{title}</h2>
-            {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+            <h2
+              id="modal-title"
+              className="text-lg font-black text-[#0B1E38] tracking-tight"
+            >
+              {title}
+            </h2>
+            {description && (
+              <p className="mt-0.5 text-xs text-slate-400 font-medium">
+                {description}
+              </p>
+            )}
           </div>
           <button
-            className="grid size-9 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
             type="button"
             aria-label="Close"
             onClick={onClose}
           >
-            <span className="text-xl leading-none" aria-hidden="true">&times;</span>
+            <span className="text-xl leading-none font-bold" aria-hidden="true">
+              &times;
+            </span>
           </button>
         </header>
         {children}
@@ -56,4 +78,3 @@ function Modal({ isOpen, title, description, onClose, children, size = "md" }) {
 }
 
 export default Modal;
-

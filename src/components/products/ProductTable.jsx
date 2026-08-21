@@ -100,32 +100,17 @@ function ProductTable({
                   {product.product_code || `PT00${product.id}`}
                 </td>
 
-                {/* Product Name & Image */}
+                {/* Product Name */}
                 <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 font-black text-xs overflow-hidden border border-slate-200/60 shadow-2xs">
-                      {product.image ? (
-                        <img
-                          src={product.image}
-                          alt=""
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        <Icon name="products" className="size-5 text-slate-400" />
-                      )}
-                    </div>
-                    <div>
-                      <strong
-                        className="block text-xs font-extrabold text-[#0B1E38] hover:text-[#FF9F43] cursor-pointer transition"
-                        onClick={() => onView(product)}
-                      >
-                        {product.name}
-                      </strong>
-                      <span className="block text-[10px] text-slate-400 font-medium">
-                        {product.barcode || "No Barcode"}
-                      </span>
-                    </div>
-                  </div>
+                  <strong
+                    className="block text-xs font-extrabold text-[#0B1E38] hover:text-[#FF9F43] cursor-pointer transition"
+                    onClick={() => onView(product)}
+                  >
+                    {product.name}
+                  </strong>
+                  <span className="block text-[10px] text-slate-400 font-medium">
+                    {product.barcode || "No Barcode"}
+                  </span>
                 </td>
 
                 {/* Category */}

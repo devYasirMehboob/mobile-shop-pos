@@ -6,6 +6,7 @@ import {
   getStockTransactions,
   recordStockMovement,
 } from "../api/inventoryApi";
+import { getProducts } from "../api/productsApi";
 import useAlert from "../hooks/useAlert";
 import useConfirmation from "../hooks/useConfirmation";
 import normalizeApiError from "../utils/normalizeApiError";
@@ -68,6 +69,7 @@ function InventoryPage() {
   const [products, setProducts] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
   const [filters, setFilters] = useState(inventoryDefaults);
   const [appliedFilters, setAppliedFilters] = useState(inventoryDefaults);
   const [pagination, setPagination] = useState({ page: 1, total: 0, total_pages: 1, limit: 10 });
@@ -86,8 +88,8 @@ function InventoryPage() {
   const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
   const [adjForm, setAdjForm] = useState({
     product_id: "",
-    warehouse: "Lavish Warehouse",
-    store: "Electro Mart",
+    warehouse: "Main Shop Warehouse",
+    store: "Main Store",
     action: "addition",
     quantity: "1",
     reason: "Stock audit update",
@@ -97,56 +99,22 @@ function InventoryPage() {
     async (nextFilters, isRefresh = false) => {
       isRefresh ? setIsRefreshing(true) : setIsLoading(true);
       try {
-        if (isAdjustmentTab) {
-          // Load stock adjustments / movements
-          const transData = await getStockTransactions(nextFilters);
-          let list = transData.transactions || [];
+        const stockStatus = activeStockTab === "out" ? "out_of_stock" : "low_stock";
+        const queryParams = isAdjustmentTab
+          ? { ...nextFilters }
+          : { ...nextFilters, stock_status: stockStatus };
 
-          if (list.length === 0 && !nextFilters.search) {
-            list = [
-              { id: 1, warehouse: "Lavish Warehouse", store: "Electro Mart", product_name: "Lenovo IdeaPad 3", product_code: "PT001", date: "2024-12-24", person: "James Kirwin" },
-              { id: 2, warehouse: "Quaint Warehouse", store: "Quantum Gadgets", product_name: "Beats Pro", product_code: "PT002", date: "2024-12-10", person: "Francis Chang" },
-              { id: 3, warehouse: "Traditional Warehouse", store: "Prime Bazaar", product_name: "Nike Jordan", product_code: "PT003", date: "2024-11-27", person: "Antonio Engle" },
-              { id: 4, warehouse: "Cool Warehouse", store: "Gadget World", product_name: "Apple Series 5 Watch", product_code: "PT004", date: "2024-11-18", person: "Leo Kelly" },
-              { id: 5, warehouse: "Overflow Warehouse", store: "Volt Vault", product_name: "Amazon Echo Dot", product_code: "PT005", date: "2024-11-06", person: "Annette Walker" },
-              { id: 6, warehouse: "Nova Storage Hub", store: "Elite Retail", product_name: "Sanford Chair Sofa", product_code: "PT006", date: "2024-10-25", person: "John Weaver" },
-              { id: 7, warehouse: "Retail Supply Hub", store: "Prime Mart", product_name: "Red Premium Satchel", product_code: "PT007", date: "2024-10-14", person: "Gary Hennessy" },
-              { id: 8, warehouse: "EdgeWare Solutions", store: "NeoTech Store", product_name: "Iphone 14 Pro", product_code: "PT008", date: "2024-10-03", person: "Eleanor Panek" },
-              { id: 9, warehouse: "North Zone Warehouse", store: "Urban Mart", product_name: "Gaming Chair", product_code: "PT009", date: "2024-09-20", person: "William Levy" },
-              { id: 10, warehouse: "Fulfillment Hub", store: "Travel Mart", product_name: "Borealis Backpack", product_code: "PT010", date: "2024-09-10", person: "Charlotte Klotz" },
-            ];
+        const inventoryData = await getInventory(queryParams);
+        const list = inventoryData.products || [];
+        setProducts(list);
+        setPagination(
+          inventoryData.pagination || {
+            page: nextFilters.page || 1,
+            total: list.length,
+            total_pages: Math.ceil(list.length / (nextFilters.limit || 10)) || 1,
+            limit: nextFilters.limit || 10,
           }
-
-          setAdjustments(list);
-          setPagination(transData.pagination || { page: 1, total: list.length, total_pages: Math.ceil(list.length / 10) || 1, limit: 10 });
-        } else {
-          // Load low stocks / inventory
-          const stockStatus = activeStockTab === "out" ? "out_of_stock" : "low_stock";
-          const queryParams = { ...nextFilters, stock_status: stockStatus };
-          const inventoryData = await getInventory(queryParams);
-
-          let list = inventoryData.products || [];
-          if (list.length === 0 && !nextFilters.search && !nextFilters.category_id) {
-            list = [
-              { id: 1, name: "Lenovo IdeaPad 3", product_code: "PT001", category_name: "Computers", quantity: 20, minimum_stock: 15, warehouse: "Lavish Warehouse", store: "Electro Mart", image: null },
-              { id: 2, name: "Beats Pro Headphones", product_code: "PT002", category_name: "Electronics", quantity: 25, minimum_stock: 20, warehouse: "Quaint Warehouse", store: "Quantum Gadgets", image: null },
-              { id: 3, name: "Nike Jordan High", product_code: "PT003", category_name: "Shoe", quantity: 40, minimum_stock: 35, warehouse: "Traditional Warehouse", store: "Prime Bazaar", image: null },
-              { id: 4, name: "Apple Series 5 Watch", product_code: "PT004", category_name: "Electronics", quantity: 50, minimum_stock: 45, warehouse: "Cool Warehouse", store: "Gadget World", image: null },
-              { id: 5, name: "Amazon Echo Dot", product_code: "PT005", category_name: "Electronics", quantity: 30, minimum_stock: 25, warehouse: "Overflow Warehouse", store: "Volt Vault", image: null },
-              { id: 6, name: "Sanford Chair Sofa", product_code: "PT006", category_name: "Furniture", quantity: 10, minimum_stock: 8, warehouse: "Nova Storage Hub", store: "Elite Retail", image: null },
-              { id: 7, name: "Red Premium Satchel", product_code: "PT007", category_name: "Bags", quantity: 70, minimum_stock: 60, warehouse: "Retail Supply Hub", store: "Prime Mart", image: null },
-              { id: 8, name: "iPhone 14 Pro Max", product_code: "PT008", category_name: "Phone", quantity: 35, minimum_stock: 30, warehouse: "EdgeWare Solutions", store: "NeoTech Store", image: null },
-              { id: 9, name: "Gaming Chair Ergonomic", product_code: "PT009", category_name: "Furniture", quantity: 15, minimum_stock: 10, warehouse: "North Zone Warehouse", store: "Urban Mart", image: null },
-              { id: 10, name: "Borealis Travel Backpack", product_code: "PT010", category_name: "Bags", quantity: 45, minimum_stock: 40, warehouse: "Fulfillment Hub", store: "Travel Mart", image: null },
-            ];
-            if (activeStockTab === "out") {
-              list = list.map((item) => ({ ...item, quantity: 0 }));
-            }
-          }
-
-          setProducts(list);
-          setPagination(inventoryData.pagination || { page: 1, total: list.length, total_pages: Math.ceil(list.length / 10) || 1, limit: 10 });
-        }
+        );
 
         setAppliedFilters(nextFilters);
       } catch (error) {
@@ -166,8 +134,19 @@ function InventoryPage() {
 
     async function initialize() {
       try {
-        const catData = await getCategories();
+        const [catData, pData] = await Promise.all([
+          getCategories().catch(() => []),
+          getProducts({ limit: 1000 }).catch(() => ({ products: [] })),
+        ]);
         setCategories((catData || []).filter((c) => c.status === "active"));
+        const prodList = pData.products || [];
+        setAllProducts(prodList);
+        if (prodList.length > 0) {
+          setAdjForm((prev) => ({
+            ...prev,
+            product_id: prev.product_id || String(prodList[0].id),
+          }));
+        }
       } catch (error) {
         alert.error(normalizeApiError(error).message);
       }
@@ -295,6 +274,33 @@ function InventoryPage() {
   // VIEW 1: STOCK ADJUSTMENT VIEW (tab=adjustment)
   // ==========================================
   if (isAdjustmentTab) {
+    const totalProductsCount = products.length;
+    const healthyStockCount = products.filter(
+      (p) => Number(p.quantity || 0) > Number(p.minimum_stock || 5)
+    ).length;
+    const lowStockCount = products.filter(
+      (p) =>
+        Number(p.quantity || 0) > 0 &&
+        Number(p.quantity || 0) <= Number(p.minimum_stock || 5)
+    ).length;
+    const outOfStockCount = products.filter(
+      (p) => Number(p.quantity || 0) <= 0
+    ).length;
+
+    const selectedProductForAdj = products.find(
+      (p) => String(p.id) === String(adjForm.product_id)
+    );
+    const currQty = Number(selectedProductForAdj?.quantity || 0);
+    const inputQty = parseFloat(adjForm.quantity) || 0;
+    const isAddType =
+      adjForm.action === "addition" || adjForm.action === "opening";
+    const isSetType = adjForm.action === "exact";
+    const resultingQty = isSetType
+      ? inputQty
+      : isAddType
+      ? currQty + inputQty
+      : Math.max(0, currQty - inputQty);
+
     return (
       <div className="space-y-5 pb-8">
         {/* 1. TOP HEADER & BREADCRUMB + ACTION BUTTONS */}
@@ -312,7 +318,7 @@ function InventoryPage() {
             </nav>
           </div>
 
-          {/* Right Actions: PDF, Excel, Refresh, Collapse, + Add Adjustment */}
+          {/* Right Actions: PDF, Excel, Refresh */}
           <div className="flex flex-wrap items-center gap-2">
             {/* PDF Export Icon */}
             <button
@@ -328,7 +334,7 @@ function InventoryPage() {
             {/* Excel Export Icon */}
             <button
               type="button"
-              onClick={() => alert.success("Excel export generated.")}
+              onClick={() => alert.success("Stock adjustment sheet exported.")}
               className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
               title="Export Excel"
               aria-label="Export Excel"
@@ -352,32 +358,75 @@ function InventoryPage() {
                 }`}
               />
             </button>
-
-            {/* Collapse Chevron Button */}
-            <button
-              type="button"
-              className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition"
-              title="Toggle View"
-              aria-label="Toggle View"
-            >
-              <Icon name="chevron-left" className="size-4 rotate-90" />
-            </button>
-
-            {/* + Add Adjustment (Orange #FF9F43 button) */}
-            <button
-              type="button"
-              onClick={() => setAdjustmentModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95 cursor-pointer"
-            >
-              <Icon name="plus-circle" className="size-4" />
-              <span>Add Adjustment</span>
-            </button>
           </div>
         </section>
 
-        {/* 2. ADJUSTMENT WHITE CONTAINER */}
+        {/* 2. TOP 4 SUMMARY METRIC CARDS */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">Total Products</span>
+              <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs font-black">
+                📦
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-black text-[#0B1E38] tracking-tight">
+              {totalProductsCount}
+            </p>
+            <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+              Active Inventory Items
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">Healthy Stock</span>
+              <span className="grid size-7 place-items-center rounded-lg bg-emerald-50 text-emerald-600 text-xs font-black">
+                ✓
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-black text-emerald-600 tracking-tight">
+              {healthyStockCount}
+            </p>
+            <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+              Above Minimum Stock
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">Low Stock Alert</span>
+              <span className="grid size-7 place-items-center rounded-lg bg-amber-50 text-amber-600 text-xs font-black">
+                ⚠️
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-black text-amber-600 tracking-tight">
+              {lowStockCount}
+            </p>
+            <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+              At or Below Min Threshold
+            </span>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">Out of Stock</span>
+              <span className="grid size-7 place-items-center rounded-lg bg-rose-50 text-rose-600 text-xs font-black">
+                ⛔
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-black text-rose-600 tracking-tight">
+              {outOfStockCount}
+            </p>
+            <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+              Needs Urgent Reorder
+            </span>
+          </div>
+        </section>
+
+        {/* 3. ADJUSTMENT WHITE CONTAINER */}
         <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
-          {/* Search & Warehouse Filter Bar */}
+          {/* Search & Category Filter Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-5">
             {/* Search Box */}
             <div className="relative w-full sm:max-w-xs">
@@ -387,27 +436,27 @@ function InventoryPage() {
               />
               <input
                 type="text"
-                placeholder="Search"
+                placeholder="Search Product Name, Barcode, SKU..."
                 value={filters.search}
                 onChange={handleSearchChange}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
             </div>
 
-            {/* Warehouse Filter Dropdown */}
+            {/* Category Filter Dropdown */}
             <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
               <div className="relative">
                 <select
-                  value={filters.warehouse}
-                  onChange={handleWarehouseChange}
+                  value={filters.category_id}
+                  onChange={handleCategoryChange}
                   className="appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
                 >
-                  <option value="">Warehouse ⌄</option>
-                  <option value="Lavish Warehouse">Lavish Warehouse</option>
-                  <option value="Quaint Warehouse">Quaint Warehouse</option>
-                  <option value="Traditional Warehouse">Traditional Warehouse</option>
-                  <option value="Cool Warehouse">Cool Warehouse</option>
-                  <option value="Overflow Warehouse">Overflow Warehouse</option>
+                  <option value="">All Categories ⌄</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
                 <Icon
                   name="chevron-down"
@@ -417,18 +466,16 @@ function InventoryPage() {
             </div>
           </div>
 
-          {/* 3. TABLE OR LOADING / EMPTY STATE */}
+          {/* 4. TABLE OR LOADING / EMPTY STATE */}
           {isLoading ? (
-            <div className="py-12">
-              <LoadingState label="Loading stock adjustments..." />
+            <div className="py-16">
+              <LoadingState label="Loading products inventory..." />
             </div>
-          ) : adjustments.length === 0 ? (
+          ) : products.length === 0 ? (
             <EmptyState
               icon="inventory"
-              title="No adjustments found"
-              description="Record a new inventory adjustment or adjust your filters."
-              actionLabel="Add Adjustment"
-              onAction={() => setAdjustmentModalOpen(true)}
+              title="No products found"
+              description="No products matching your search criteria."
             />
           ) : (
             <div className="overflow-x-auto">
@@ -440,26 +487,50 @@ function InventoryPage() {
                         type="checkbox"
                         className="size-4 rounded-md border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer"
                         checked={
-                          adjustments.length > 0 &&
-                          selectedIds.size === adjustments.length
+                          products.length > 0 &&
+                          selectedIds.size === products.length
                         }
                         onChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="px-4 py-3.5">Warehouse</th>
-                    <th className="px-4 py-3.5">Store</th>
+                    <th className="px-4 py-3.5">Code / SKU</th>
                     <th className="px-4 py-3.5">Product Name</th>
-                    <th className="px-4 py-3.5">Date ⇅</th>
-                    <th className="px-4 py-3.5">Person</th>
+                    <th className="px-4 py-3.5">Category</th>
+                    <th className="px-4 py-3.5 text-center">In-Stock Qty</th>
+                    <th className="px-4 py-3.5 text-center">Min Alert Level</th>
+                    <th className="px-4 py-3.5">Stock Status</th>
                     <th className="px-4 py-3.5 text-right">Action</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {adjustments.map((item, idx) => {
+                  {products.map((item) => {
                     const isSelected = selectedIds.has(item.id);
-                    const pInfo = samplePersons[idx % samplePersons.length];
-                    const personName = item.person || item.access_credentials?.name || pInfo.name;
+                    const qty = Number(item.quantity || 0);
+                    const minStock = Number(item.minimum_stock || 5);
+
+                    let statusBadge = (
+                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase border bg-emerald-50 text-emerald-700 border-emerald-200/60">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        In Stock
+                      </span>
+                    );
+
+                    if (qty <= 0) {
+                      statusBadge = (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase border bg-rose-50 text-rose-700 border-rose-200/60">
+                          <span className="size-1.5 rounded-full bg-rose-500" />
+                          Out of Stock
+                        </span>
+                      );
+                    } else if (qty <= minStock) {
+                      statusBadge = (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase border bg-amber-50 text-amber-700 border-amber-200/60">
+                          <span className="size-1.5 rounded-full bg-amber-500" />
+                          Low Stock
+                        </span>
+                      );
+                    }
 
                     return (
                       <tr
@@ -478,83 +549,77 @@ function InventoryPage() {
                           />
                         </td>
 
-                        {/* Warehouse */}
-                        <td className="px-4 py-3.5 text-slate-600 font-medium">
-                          {item.warehouse || "Lavish Warehouse"}
+                        {/* Code / SKU */}
+                        <td className="px-4 py-3.5 font-mono font-bold text-slate-600">
+                          {item.product_code || item.barcode || `PRD-${item.id}`}
                         </td>
 
-                        {/* Store */}
-                        <td className="px-4 py-3.5 text-slate-600 font-medium">
-                          {item.store || "Electro Mart"}
-                        </td>
-
-                        {/* Product Name & Icon */}
+                        {/* Product Name */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
-                            <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 font-black text-xs overflow-hidden border border-slate-200/60 shadow-2xs">
-                              <Icon name="products" className="size-4 text-slate-400" />
+                            <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-orange-50 text-[#FF9F43] font-black text-xs border border-orange-200/40 shadow-2xs">
+                              {item.name?.charAt(0) || "P"}
                             </div>
-                            <strong className="block text-xs font-extrabold text-[#0B1E38]">
-                              {item.product_name || item.products?.name || "Product"}
-                            </strong>
+                            <div>
+                              <strong className="block text-xs font-bold text-[#0B1E38]">
+                                {item.name}
+                              </strong>
+                              {item.barcode && (
+                                <span className="block text-[10px] font-mono text-slate-400">
+                                  {item.barcode}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
-                        {/* Date */}
-                        <td className="px-4 py-3.5 text-slate-600 font-semibold whitespace-nowrap">
-                          {formatDate(item.date || item.created_at)}
+                        {/* Category */}
+                        <td className="px-4 py-3.5 text-slate-600 font-semibold">
+                          {item.category_name || "General"}
                         </td>
 
-                        {/* Person (Avatar + Name) */}
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`grid size-7 shrink-0 place-items-center rounded-full ${pInfo.bg} text-white font-black text-[10px] shadow-2xs`}
-                            >
-                              {personName.slice(0, 2).toUpperCase()}
-                            </div>
-                            <span className="text-xs font-bold text-slate-800">
-                              {personName}
-                            </span>
-                          </div>
+                        {/* In-Stock Qty */}
+                        <td className="px-4 py-3.5 text-center">
+                          <strong
+                            className={`text-sm font-black ${
+                              qty <= 0
+                                ? "text-rose-600"
+                                : qty <= minStock
+                                ? "text-amber-600"
+                                : "text-[#0B1E38]"
+                            }`}
+                          >
+                            {qty} Units
+                          </strong>
                         </td>
 
-                        {/* Action Buttons */}
+                        {/* Min Alert Level */}
+                        <td className="px-4 py-3.5 text-center text-slate-500 font-semibold">
+                          {minStock} Units
+                        </td>
+
+                        {/* Status Badge */}
+                        <td className="px-4 py-3.5">{statusBadge}</td>
+
+                        {/* Action: Adjust Stock */}
                         <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* View Document */}
-                            <button
-                              type="button"
-                              onClick={() => alert.info(`Adjustment details for ${item.product_name || "Product"}`)}
-                              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 transition"
-                              title="View Note"
-                              aria-label="View Note"
-                            >
-                              <span className="text-xs">📄</span>
-                            </button>
-
-                            {/* Edit */}
-                            <button
-                              type="button"
-                              onClick={() => setAdjustmentModalOpen(true)}
-                              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 transition"
-                              title="Edit Adjustment"
-                              aria-label="Edit Adjustment"
-                            >
-                              <Icon name="edit" className="size-3.5" />
-                            </button>
-
-                            {/* Delete */}
-                            <button
-                              type="button"
-                              onClick={() => alert.info("Adjustment record retained in audit history.")}
-                              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 transition"
-                              title="Delete Adjustment"
-                              aria-label="Delete Adjustment"
-                            >
-                              <Icon name="trash" className="size-3.5" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdjForm({
+                                product_id: String(item.id),
+                                action: "addition",
+                                quantity: "1",
+                                reason: "Physical count reconciliation",
+                              });
+                              setAdjustmentModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-orange-50 border border-orange-200/70 px-3 py-1.5 text-xs font-black text-[#FF9F43] shadow-2xs hover:bg-[#FF9F43] hover:text-white transition-all cursor-pointer active:scale-95"
+                            title="Adjust Product Stock"
+                          >
+                            <Icon name="edit" className="size-3" />
+                            <span>Adjust Stock</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -564,138 +629,99 @@ function InventoryPage() {
             </div>
           )}
 
-          {/* 4. FOOTER PAGINATION & ROWS PER PAGE */}
-          <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
-            {/* Left: Row Per Page */}
-            <div className="flex items-center gap-2 text-slate-500 font-semibold">
-              <span>Row Per Page</span>
-              <div className="relative">
+          {/* 5. FOOTER PAGINATION */}
+          {!isLoading && products.length > 0 && (
+            <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
+              <div className="flex items-center gap-2 text-slate-500 font-semibold">
+                <span>Rows per page</span>
                 <select
                   value={pagination.limit || 10}
                   onChange={(e) => changeLimit(e.target.value)}
-                  className="appearance-none rounded-lg border border-slate-200 bg-white pl-2.5 pr-7 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
                 >
                   <option value="10">10</option>
-                  <option value="20">20</option>
+                  <option value="25">25</option>
                   <option value="50">50</option>
                 </select>
-                <Icon
-                  name="chevron-down"
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 size-2.5 text-slate-400"
-                />
+                <span>of {pagination.total} products</span>
               </div>
-              <span>Entries</span>
-            </div>
 
-            {/* Right: Numbered Pagination Controls (< 1 2 3 [4] ... 15 >) */}
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                disabled={(pagination.page || 1) <= 1}
-                onClick={() => changePage((pagination.page || 1) - 1)}
-                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
-                aria-label="Previous Page"
-              >
-                ‹
-              </button>
-
-              {Array.from(
-                { length: Math.min(5, pagination.total_pages || 1) },
-                (_, i) => i + 1
-              ).map((pageNum) => (
+              <div className="flex items-center gap-1.5">
                 <button
-                  key={pageNum}
                   type="button"
-                  onClick={() => changePage(pageNum)}
-                  className={`grid size-8 place-items-center rounded-lg text-xs font-bold transition cursor-pointer ${
-                    (pagination.page || 1) === pageNum
-                      ? "bg-[#FF9F43] text-white shadow-xs"
-                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
+                  disabled={(pagination.page || 1) <= 1}
+                  onClick={() => changePage((pagination.page || 1) - 1)}
+                  className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
                 >
-                  {pageNum}
+                  ‹
                 </button>
-              ))}
-
-              {(pagination.total_pages || 1) > 5 && (
-                <>
-                  <span className="px-1 text-slate-400">...</span>
-                  <button
-                    type="button"
-                    onClick={() => changePage(pagination.total_pages)}
-                    className="grid size-8 place-items-center rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
-                  >
-                    {pagination.total_pages}
-                  </button>
-                </>
-              )}
-
-              <button
-                type="button"
-                disabled={(pagination.page || 1) >= (pagination.total_pages || 1)}
-                onClick={() => changePage((pagination.page || 1) + 1)}
-                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
-                aria-label="Next Page"
-              >
-                ›
-              </button>
+                <span className="px-2 font-bold text-slate-700">
+                  Page {pagination.page || 1} of {pagination.total_pages || 1}
+                </span>
+                <button
+                  type="button"
+                  disabled={(pagination.page || 1) >= (pagination.total_pages || 1)}
+                  onClick={() => changePage((pagination.page || 1) + 1)}
+                  className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
+                >
+                  ›
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </section>
 
-        {/* CREATE ADJUSTMENT MODAL */}
+        {/* 6. CREATE ADJUSTMENT MODAL */}
         <Modal
           isOpen={adjustmentModalOpen}
-          title="Add Stock Adjustment"
-          description="Record a physical count adjustment, wastage or relocation."
+          title={`Adjust Stock — ${selectedProductForAdj?.name || "Product"}`}
+          description="Update in-stock quantity, log audit reasons, and reconcile physical inventory."
           onClose={() => setAdjustmentModalOpen(false)}
           size="md"
         >
           <form onSubmit={handleCreateAdjustment} className="space-y-4 p-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Warehouse <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={adjForm.warehouse}
-                onChange={(e) => setAdjForm((f) => ({ ...f, warehouse: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 cursor-pointer"
-              >
-                <option value="Lavish Warehouse">Lavish Warehouse</option>
-                <option value="Quaint Warehouse">Quaint Warehouse</option>
-                <option value="Traditional Warehouse">Traditional Warehouse</option>
-                <option value="Cool Warehouse">Cool Warehouse</option>
-              </select>
-            </div>
+            {/* Selected Product Stock Card */}
+            {selectedProductForAdj && (
+              <div className="rounded-2xl border border-orange-100 bg-orange-50/50 p-4 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <span className="text-slate-500">Product:</span>
+                  <span className="text-[#0B1E38] font-black">{selectedProductForAdj.name}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-bold border-t border-orange-200/40 pt-2">
+                  <span className="text-slate-500">Current Stock in System:</span>
+                  <span className="text-[#0B1E38] font-black text-sm">{currQty} Units</span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-bold border-t border-orange-200/40 pt-2">
+                  <span className="text-slate-500">Calculated Resulting Stock:</span>
+                  <span
+                    className={`font-black text-sm ${
+                      resultingQty < 0 ? "text-rose-600" : "text-emerald-600"
+                    }`}
+                  >
+                    {resultingQty} Units
+                  </span>
+                </div>
+              </div>
+            )}
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Store <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={adjForm.store}
-                onChange={(e) => setAdjForm((f) => ({ ...f, store: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 cursor-pointer"
-              >
-                <option value="Electro Mart">Electro Mart</option>
-                <option value="Quantum Gadgets">Quantum Gadgets</option>
-                <option value="Prime Bazaar">Prime Bazaar</option>
-                <option value="Main Shop">Main Shop</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+            {/* Adjustment Type & Quantity */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Adjustment Type
                 </label>
                 <select
                   value={adjForm.action}
-                  onChange={(e) => setAdjForm((f) => ({ ...f, action: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 cursor-pointer"
+                  onChange={(e) =>
+                    setAdjForm((f) => ({ ...f, action: e.target.value }))
+                  }
+                  className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 cursor-pointer"
                 >
-                  <option value="addition">Addition (+)</option>
-                  <option value="subtraction">Subtraction / Damage (-)</option>
+                  <option value="addition">Stock Inward / Addition (+)</option>
+                  <option value="manual_reduction">Manual Reduction (-)</option>
+                  <option value="damaged">Damaged / Broken Goods (-)</option>
+                  <option value="expired">Expired Stock (-)</option>
+                  <option value="exact">Set Exact Total Stock (=)</option>
                 </select>
               </div>
 
@@ -709,26 +735,32 @@ function InventoryPage() {
                   step="any"
                   required
                   value={adjForm.quantity}
-                  onChange={(e) => setAdjForm((f) => ({ ...f, quantity: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+                  onChange={(e) =>
+                    setAdjForm((f) => ({ ...f, quantity: e.target.value }))
+                  }
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
                 />
               </div>
             </div>
 
+            {/* Reason / Notes */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Reason / Note
+                Audit Reason / Notes
               </label>
               <input
                 type="text"
-                placeholder="e.g. Audit variance, broken seal"
+                placeholder="e.g. Physical inventory count, restock, damaged during transit"
                 value={adjForm.reason}
-                onChange={(e) => setAdjForm((f) => ({ ...f, reason: e.target.value }))}
+                onChange={(e) =>
+                  setAdjForm((f) => ({ ...f, reason: e.target.value }))
+                }
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
             </div>
 
-            <div className="flex justify-end gap-3 pt-3">
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setAdjustmentModalOpen(false)}
@@ -739,10 +771,10 @@ function InventoryPage() {
               </button>
               <button
                 type="submit"
-                className="rounded-xl bg-[#FF9F43] px-5 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-[#F38C2A] transition disabled:opacity-60 cursor-pointer"
+                className="rounded-xl bg-[#FF9F43] px-5 py-2 text-xs font-black text-white shadow-sm hover:bg-[#F38C2A] transition disabled:opacity-60 cursor-pointer"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Saving..." : "Record Adjustment"}
+                {isSubmitting ? "Updating..." : "Save Adjustment"}
               </button>
             </div>
           </form>

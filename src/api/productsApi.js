@@ -76,6 +76,12 @@ function sanitizeProductForDb(raw) {
     ...rest
   } = raw;
 
+  if (image_data) {
+    rest.image = image_data;
+  } else if (remove_image) {
+    rest.image = null;
+  }
+
   return {
     ...rest,
     category_id: Number(rest.category_id),
@@ -110,16 +116,163 @@ function sanitizeProductForDb(raw) {
   };
 }
 
-export async function createProduct(productData) {
-  if (isSupabaseConfigured()) {
-    const payload = sanitizeProductForDb(productData);
+async function uploadProductImageBase64(base64Str) {
+  if (!base64Str || typeof base64Str !== "string") return null;
+  if (base64Str.startsWith("http://") || base64Str.startsWith("https://")) return base64Str;
+  if (!base64Str.startsWith("data:")) return null;
+
+  try {
+    const [header, content] = base64Str.split(",");
+    const mimeMatch = header?.match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+    const ext = mime.split("/")[1] || "jpg";
+    const byteCharacters = atob(content);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      byteArrays.push(new Uint8Array(byteNumbers));
+    }
+    const blob = new Blob(byteArrays, { type: mime });
+    const fileName = `prod_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("product_images")
+      .upload(fileName, blob, { contentType: mime, upsert: true });
+
+    if (uploadError) {
+      console.warn("Storage upload error (fallback):", uploadError.message);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("product_images")
+      .getPublicUrl(fileName);
+
+    return urlData?.publicUrl || null;
+  } catch (e) {
+    console.warn("Image conversion failed:", e);
+    return null;
+  }
+}
+
+let knownValidColumns = null;
+
+async function getAvailableProductColumns() {
+  if (knownValidColumns) return knownValidColumns;
+  try {
+    const { data, error } = await supabase.from("products").select("*").limit(1);
+    if (!error && data && data.length > 0) {
+      knownValidColumns = new Set(Object.keys(data[0]));
+      return knownValidColumns;
+    }
+  } catch (e) {
+    console.warn("Column detection warning:", e);
+  }
+  return null;
+}
+
+function pruneToExistingColumns(payload, validColumns) {
+  if (!validColumns || validColumns.size === 0) return { ...payload };
+  const pruned = {};
+  for (const key of Object.keys(payload)) {
+    if (validColumns.has(key)) {
+      pruned[key] = payload[key];
+    }
+  }
+  return pruned;
+}
+
+async function executeSupabaseInsert(payload) {
+  const validCols = await getAvailableProductColumns();
+  let current = pruneToExistingColumns(payload, validCols);
+
+  for (let attempt = 0; attempt < 35; attempt++) {
     const { data, error } = await supabase
       .from("products")
-      .insert([payload])
-      .select()
+      .insert([current])
+      .select("id, name, product_code, selling_price")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (!error) return data;
+
+    // Check if error is due to a missing column in remote Supabase table
+    const match = error.message?.match(/Could not find the '([^']+)' column/i);
+    if (match && match[1]) {
+      const col = match[1];
+      delete current[col];
+      if (knownValidColumns) knownValidColumns.delete(col);
+      continue;
+    }
+
+    // Check if value too long (VARCHAR 255 constraint)
+    if (error.code === "22001" || error.message?.includes("too long")) {
+      if (current.image && current.image.length > 255) {
+        delete current.image;
+      }
+      for (const key of Object.keys(current)) {
+        if (typeof current[key] === "string" && current[key].length > 255) {
+          current[key] = current[key].substring(0, 250);
+        }
+      }
+      continue;
+    }
+
+    throw new Error(error.message);
+  }
+}
+
+async function executeSupabaseUpdate(id, payload) {
+  const validCols = await getAvailableProductColumns();
+  let current = pruneToExistingColumns(payload, validCols);
+
+  for (let attempt = 0; attempt < 35; attempt++) {
+    const { data, error } = await supabase
+      .from("products")
+      .update(current)
+      .eq("id", Number(id))
+      .select("id, name, product_code, selling_price")
+      .single();
+
+    if (!error) return data;
+
+    const match = error.message?.match(/Could not find the '([^']+)' column/i);
+    if (match && match[1]) {
+      const col = match[1];
+      delete current[col];
+      if (knownValidColumns) knownValidColumns.delete(col);
+      continue;
+    }
+
+    // Check if value too long (VARCHAR 255 constraint)
+    if (error.code === "22001" || error.message?.includes("too long")) {
+      if (current.image && current.image.length > 255) {
+        delete current.image;
+      }
+      for (const key of Object.keys(current)) {
+        if (typeof current[key] === "string" && current[key].length > 255) {
+          current[key] = current[key].substring(0, 250);
+        }
+      }
+      continue;
+    }
+
+    throw new Error(error.message);
+  }
+}
+
+export async function createProduct(productData) {
+  if (isSupabaseConfigured()) {
+    let payload = sanitizeProductForDb(productData);
+    if (productData.image_data && productData.image_data.startsWith("data:")) {
+      const uploadedUrl = await uploadProductImageBase64(productData.image_data);
+      if (uploadedUrl) payload.image = uploadedUrl;
+      else delete payload.image;
+    }
+    const data = await executeSupabaseInsert(payload);
     return { success: true, message: "Product created successfully.", data };
   }
 
@@ -129,15 +282,13 @@ export async function createProduct(productData) {
 
 export async function updateProduct(id, productData) {
   if (isSupabaseConfigured()) {
-    const payload = sanitizeProductForDb(productData);
-    const { data, error } = await supabase
-      .from("products")
-      .update(payload)
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error) throw new Error(error.message);
+    let payload = sanitizeProductForDb(productData);
+    if (productData.image_data && productData.image_data.startsWith("data:")) {
+      const uploadedUrl = await uploadProductImageBase64(productData.image_data);
+      if (uploadedUrl) payload.image = uploadedUrl;
+      else delete payload.image;
+    }
+    const data = await executeSupabaseUpdate(id, payload);
     return { success: true, message: "Product updated successfully.", data };
   }
 

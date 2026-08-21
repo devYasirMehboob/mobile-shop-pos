@@ -11,6 +11,8 @@ import BatchesPage from "./pages/BatchesPage";
 import LoginPage from "./pages/LoginPage";
 import PosPage from "./pages/PosPage";
 import ProductsPage from "./pages/ProductsPage";
+import ProductFormPage from "./pages/ProductFormPage";
+import ProductDetailsPage from "./pages/ProductDetailsPage";
 import ReportsPage from "./pages/ReportsPage";
 import PackagingStockPage from "./pages/PackagingStockPage";
 import SalesPage from "./pages/SalesPage";
@@ -70,6 +72,18 @@ function App() {
             <Route
               path="products"
               element={permitted("products.view", <ProductsPage />)}
+            />
+            <Route
+              path="products/new"
+              element={permitted("products.create", <ProductFormPage />)}
+            />
+            <Route
+              path="products/:id/edit"
+              element={permitted("products.update", <ProductFormPage />)}
+            />
+            <Route
+              path="products/:id"
+              element={permitted("products.view", <ProductDetailsPage />)}
             />
             <Route
               path="products/labels"

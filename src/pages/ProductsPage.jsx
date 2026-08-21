@@ -171,85 +171,23 @@ function ProductsPage() {
   });
 
   function openCreateForm(initialBarcode = "") {
-    setEditingProduct(null);
-    setFormValues({
-      ...emptyForm,
-      barcode: typeof initialBarcode === "string" ? initialBarcode : "",
-      product_code: `SKU-${Math.floor(100000 + Math.random() * 900000)}`,
-    });
-    setFormErrors({});
-    setImagePreview(null);
-    setFormMode("create");
-    if (!location.search.includes("action=new")) {
-      navigate("/products?action=new", { replace: true });
+    if (initialBarcode && typeof initialBarcode === "string") {
+      navigate(`/products/new?barcode=${encodeURIComponent(initialBarcode)}`);
+    } else {
+      navigate("/products/new");
     }
   }
 
-  async function openEditForm(product) {
-    setActionId(product.id);
-
-    try {
-      const latest = await getProduct(product.id);
-      setEditingProduct(latest);
-      setFormValues({
-        ...emptyForm,
-        category_id: latest.category_id ? String(latest.category_id) : "",
-        name: latest.name || "",
-        product_code: latest.product_code || "",
-        barcode: latest.barcode || "",
-        brand: latest.brand || "",
-        description: latest.description || "",
-        purchase_cost: latest.purchase_cost ?? "0.00",
-        selling_price: latest.selling_price || "",
-        quantity: latest.quantity ?? "0",
-        minimum_stock: latest.minimum_stock ?? "5",
-        tax: latest.tax ?? "0",
-        discount_type: latest.discount_type || "fixed",
-        discount_value: latest.discount_value ?? "0",
-        warranty: latest.warranty || "1 Year",
-        manufacturer: latest.manufacturer || "",
-        manufactured_date: latest.manufactured_date || "",
-        expiry_date: latest.expiry_date || "",
-        base_unit_id: latest.base_unit_id ? String(latest.base_unit_id) : "",
-        default_purchase_unit_id: latest.default_purchase_unit_id ? String(latest.default_purchase_unit_id) : "",
-        default_sale_unit_id: latest.default_sale_unit_id ? String(latest.default_sale_unit_id) : "",
-        stock_mode: latest.stock_mode || "own",
-        stock_source_id: latest.stock_source_id ? String(latest.stock_source_id) : "",
-        consumption_quantity: latest.consumption_quantity ?? "",
-        consumption_unit_id: latest.consumption_unit_id ? String(latest.consumption_unit_id) : "",
-        consumption_quantity_base: latest.consumption_quantity_base ?? "",
-        allow_custom_sale: Boolean(Number(latest.allow_custom_sale)),
-        track_stock: Boolean(Number(latest.track_stock)),
-        track_batches: Boolean(Number(latest.track_batches)),
-        track_expiry: Boolean(Number(latest.track_expiry)),
-        status: latest.status || "active",
-        image_data: null,
-        remove_image: false,
-      });
-      setImagePreview(productImageUrl(latest.image));
-      setFormErrors({});
-      setFormMode("edit");
-    } catch (error) {
-      alert.error(normalizeApiError(error).message);
-    } finally {
-      setActionId(null);
-    }
+  function openEditForm(product) {
+    navigate(`/products/${product.id}/edit`);
   }
 
-  async function openDetails(product) {
-    setActionId(product.id);
-
-    try {
-      setDetailsProduct(await getProduct(product.id));
-    } catch (error) {
-      alert.error(normalizeApiError(error).message);
-    } finally {
-      setActionId(null);
-    }
+  function openDetails(product) {
+    navigate(`/products/${product.id}`);
   }
 
-  function closeForm() {
-    if (isSubmitting) return;
+  function closeForm(force = false) {
+    if (isSubmitting && !force) return;
     setFormMode(null);
     setEditingProduct(null);
     setFormErrors({});
@@ -311,11 +249,26 @@ function ProductsPage() {
     event.preventDefault();
     setFormErrors({});
 
+    let payload = { ...formValues };
+
+    // Auto-generate barcode if left blank by admin
+    if (!payload.barcode || !payload.barcode.trim()) {
+      payload.barcode = `890${Date.now().toString().slice(-9)}`;
+    } else {
+      payload.barcode = payload.barcode.trim();
+    }
+
+    // Auto-generate SKU / product code if left blank
+    if (!payload.product_code || !payload.product_code.trim()) {
+      payload.product_code = `SKU-${Math.floor(100000 + Math.random() * 900000)}`;
+    } else {
+      payload.product_code = payload.product_code.trim();
+    }
+
     const requiredErrors = {};
-    if (!formValues.name.trim()) requiredErrors.name = "Product name is required.";
-    if (!formValues.product_code.trim()) requiredErrors.product_code = "SKU is required.";
-    if (!formValues.category_id) requiredErrors.category_id = "Select a category.";
-    if (!formValues.selling_price || Number(formValues.selling_price) <= 0) requiredErrors.selling_price = "Selling price must be greater than zero.";
+    if (!payload.name.trim()) requiredErrors.name = "Product name is required.";
+    if (!payload.category_id) requiredErrors.category_id = "Select a category.";
+    if (!payload.selling_price || Number(payload.selling_price) <= 0) requiredErrors.selling_price = "Selling price must be greater than zero.";
 
     if (Object.keys(requiredErrors).length > 0) {
       setFormErrors(requiredErrors);
@@ -327,11 +280,11 @@ function ProductsPage() {
 
     try {
       const response = formMode === "edit"
-        ? await updateProduct(editingProduct.id, formValues)
-        : await createProduct(formValues);
+        ? await updateProduct(editingProduct.id, payload)
+        : await createProduct(payload);
 
       alert.success(response.message || "Product saved successfully.");
-      closeForm();
+      closeForm(true);
       await loadProducts(appliedFilters);
     } catch (error) {
       const normalized = normalizeApiError(error);
@@ -479,7 +432,7 @@ function ProductsPage() {
           {canCreate && (
             <button
               type="button"
-              onClick={() => openCreateForm()}
+              onClick={() => navigate("/products/new")}
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95 cursor-pointer"
             >
               <Icon name="plus-circle" className="size-4" />
@@ -653,24 +606,6 @@ function ProductsPage() {
           </div>
         </div>
       </section>
-
-      {/* DETAILS MODAL */}
-      <Modal
-        isOpen={detailsProduct !== null}
-        title="Product Details"
-        description="Complete product information."
-        onClose={() => setDetailsProduct(null)}
-        size="lg"
-      >
-        {detailsProduct && (
-          <ProductDetails
-            product={detailsProduct}
-            canViewCosts={canViewCosts}
-            units={units}
-            onClose={() => setDetailsProduct(null)}
-          />
-        )}
-      </Modal>
     </div>
   );
 }

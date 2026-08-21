@@ -20,6 +20,9 @@ export default function DreamsProductFormPage({
   onCancel,
   onGenerateBarcode,
 }) {
+  const safeCategories = Array.isArray(categories) ? categories : (categories?.categories || []);
+  const safeUnits = Array.isArray(units) ? units : (units?.units || []);
+
   const [openSections, setOpenSections] = useState({
     info: true,
     pricing: true,
@@ -30,6 +33,16 @@ export default function DreamsProductFormPage({
   const [enableWarranty, setEnableWarranty] = useState(true);
   const [enableManufacturer, setEnableManufacturer] = useState(true);
   const [enableExpiry, setEnableExpiry] = useState(true);
+
+  function handleFormatText(prefix, suffix = prefix) {
+    const current = values.description || "";
+    onChange({
+      target: {
+        name: "description",
+        value: current ? `${current} ${prefix}text${suffix}` : `${prefix}text${suffix}`,
+      },
+    });
+  }
 
   // Auto generate SKU if empty
   function handleGenerateSku() {
@@ -184,7 +197,7 @@ export default function DreamsProductFormPage({
                       }`}
                     >
                       <option value="">Select Category</option>
-                      {categories.map((c) => (
+                      {safeCategories.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
                         </option>
@@ -228,22 +241,27 @@ export default function DreamsProductFormPage({
 
                 {/* Item Code / Barcode */}
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
-                    Item Code / Barcode <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Item Code / Barcode
+                    </label>
+                    <span className="text-[10px] font-semibold text-slate-400">
+                      (Auto-generated if empty)
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
                       name="barcode"
                       value={values.barcode || ""}
                       onChange={onChange}
-                      placeholder="e.g. 890123456789"
+                      placeholder="Leave empty for auto-generated code"
                       className="flex-1 rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
                     />
                     <button
                       type="button"
                       onClick={handleGenerateItemCode}
-                      className="rounded-xl bg-[#FF9F43] px-3.5 py-2.5 text-xs font-bold text-white shadow-2xs hover:bg-[#F38C2A] transition active:scale-95 shrink-0"
+                      className="rounded-xl bg-[#FF9F43] px-3.5 py-2.5 text-xs font-bold text-white shadow-2xs hover:bg-[#F38C2A] transition active:scale-95 shrink-0 cursor-pointer"
                     >
                       Generate
                     </button>
@@ -281,7 +299,7 @@ export default function DreamsProductFormPage({
                       className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 pr-8 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 cursor-pointer"
                     >
                       <option value="">Select Unit (e.g. Piece, Box, Pack)</option>
-                      {units.map((u) => (
+                      {safeUnits.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name} ({u.symbol})
                         </option>
@@ -303,14 +321,14 @@ export default function DreamsProductFormPage({
                 <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs focus-within:border-[#FF9F43] focus-within:ring-4 focus-within:ring-orange-100 transition">
                   {/* Text Editor Toolbar */}
                   <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 text-slate-500 text-xs font-bold">
-                    <button type="button" className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 font-black">B</button>
-                    <button type="button" className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 italic font-serif">I</button>
-                    <button type="button" className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 underline">U</button>
+                    <button type="button" onClick={() => handleFormatText("**")} className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 font-black cursor-pointer" title="Bold">B</button>
+                    <button type="button" onClick={() => handleFormatText("*")} className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 italic font-serif cursor-pointer" title="Italic">I</button>
+                    <button type="button" onClick={() => handleFormatText("__")} className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 underline cursor-pointer" title="Underline">U</button>
                     <span className="h-3.5 w-px bg-slate-200 mx-1" />
-                    <button type="button" className="px-1.5 py-0.5 rounded hover:bg-slate-200/60">🔗</button>
-                    <button type="button" className="px-1.5 py-0.5 rounded hover:bg-slate-200/60">☰</button>
-                    <button type="button" className="px-1.5 py-0.5 rounded hover:bg-slate-200/60">❝</button>
-                    <button type="button" className="px-1.5 py-0.5 rounded hover:bg-slate-200/60">&lt;/&gt;</button>
+                    <button type="button" onClick={() => handleFormatText("[Link](", ")")} className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 cursor-pointer" title="Link">🔗</button>
+                    <button type="button" onClick={() => handleFormatText("• ")} className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 cursor-pointer" title="Bullet List">☰</button>
+                    <button type="button" onClick={() => handleFormatText('"', '"')} className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 cursor-pointer" title="Quote">❝</button>
+                    <button type="button" onClick={() => handleFormatText("`", "`")} className="px-1.5 py-0.5 rounded hover:bg-slate-200/60 cursor-pointer" title="Code">&lt;/&gt;</button>
                   </div>
                   {/* Textarea */}
                   <textarea

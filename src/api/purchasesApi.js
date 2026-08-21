@@ -23,9 +23,25 @@ export async function getPurchases(params = {}) {
       supplier_name: p.suppliers?.name || "Supplier",
     }));
 
+    const totalPurchases = formatted.reduce((acc, p) => acc + Number(p.grand_total || p.subtotal || 0), 0);
+    const totalPaid = formatted.reduce((acc, p) => acc + Number(p.paid_amount || 0), 0);
+    const totalDue = formatted.reduce((acc, p) => acc + Number(p.due_amount || 0), 0);
+
+    const { data: suppliersList } = await supabase
+      .from("suppliers")
+      .select("id, name")
+      .order("name", { ascending: true });
+
     return {
       purchases: formatted,
       total: formatted.length,
+      summary: {
+        total_purchases: totalPurchases,
+        total_paid: totalPaid,
+        total_due: totalDue,
+        purchase_count: formatted.length,
+      },
+      suppliers: suppliersList || [],
       pagination: { page: 1, per_page: formatted.length, total: formatted.length, total_pages: 1 },
     };
   }

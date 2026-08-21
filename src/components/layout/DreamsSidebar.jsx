@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import Icon from "../Icon";
 import useAuth from "../../hooks/useAuth";
 import usePermissions from "../../hooks/usePermissions";
@@ -36,7 +36,7 @@ const sidebarGroups = [
     label: "Sales",
     items: [
       { label: "Sales", path: "/sales", icon: "sales", permission: "sales.view", hasArrow: true },
-      { label: "Invoices", path: "/sales", icon: "invoices", permission: "sales.view" },
+      { label: "Invoices", path: "/sales?view=invoices", icon: "invoices", permission: "sales.view" },
       { label: "Sales Return", path: "/sales?tab=returns", icon: "returns", permission: "sales.view" },
       { label: "POS", path: "/pos", icon: "pos", permission: "pos.access", hasArrow: true, badge: "POS" },
     ],
@@ -166,13 +166,46 @@ export default function DreamsSidebar({
               {/* Items in Group */}
               <div className="space-y-1">
                 {group.items.map((item) => {
-                  const isActive =
-                    item.path === "/dashboard"
-                      ? location.pathname === "/dashboard"
-                      : location.pathname.startsWith(item.path.split("?")[0]);
+                  const [targetPath, targetQuery] = item.path.split("?");
+                  let isActive = false;
+
+                  if (targetQuery) {
+                    if (location.pathname === targetPath) {
+                      const targetParams = new URLSearchParams(targetQuery);
+                      const currentParams = new URLSearchParams(location.search);
+                      isActive = true;
+                      for (const [key, value] of targetParams.entries()) {
+                        if (currentParams.get(key) !== value) {
+                          isActive = false;
+                          break;
+                        }
+                      }
+                    }
+                  } else {
+                    if (location.pathname === targetPath) {
+                      // Ensure it doesn't activate if sub-actions or tabs are present
+                      if (targetPath === "/products" && location.search.includes("action=new")) {
+                        isActive = false;
+                      } else if (
+                        targetPath === "/inventory" &&
+                        (location.search.includes("tab=adjustment") ||
+                          location.search.includes("filter=low"))
+                      ) {
+                        isActive = false;
+                      } else if (
+                        targetPath === "/sales" &&
+                        (location.search.includes("tab=returns") ||
+                          location.search.includes("view=invoices"))
+                      ) {
+                        isActive = false;
+                      } else {
+                        isActive = true;
+                      }
+                    }
+                  }
 
                   return (
-                    <NavLink
+                    <Link
                       key={item.label + item.path}
                       to={item.path}
                       title={isCollapsed ? item.label : undefined}
@@ -233,7 +266,7 @@ export default function DreamsSidebar({
                           )}
                         </>
                       )}
-                    </NavLink>
+                    </Link>
                   );
                 })}
               </div>

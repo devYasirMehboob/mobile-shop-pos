@@ -21,9 +21,15 @@ export async function getExpenses(params = {}) {
       category_name: e.expense_categories?.name || "General",
     }));
 
+    const { data: categoriesList } = await supabase
+      .from("expense_categories")
+      .select("id, name")
+      .order("name", { ascending: true });
+
     return {
       expenses: formatted,
       total: formatted.length,
+      categories: categoriesList || [],
       pagination: {
         page: 1,
         per_page: formatted.length,

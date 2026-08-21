@@ -131,25 +131,25 @@ function ReportFilters({ type, filters, options, onChange, onClear }) {
         ) : (
           <div className="text-xs font-bold text-slate-400">Filters</div>
         )}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onClear}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition"
-          >
-            <Icon name="x" className="size-3.5" />
-            Clear
-          </button>
+        <div className="flex flex-col items-end gap-2 shrink-0">
           {hasAdvanced && (
             <button
               type="button"
               onClick={() => setShowAdvanced((s) => !s)}
-              className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 shadow-sm hover:bg-slate-50 transition"
+              className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 border border-slate-200 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
             >
-              <Icon name="filter" className="size-3.5" />
-              {showAdvanced ? "Hide filters" : "More filters"}
+              <Icon name="filter" className="size-3.5 text-slate-500" />
+              <span>{showAdvanced ? "Hide filters" : "More filters"}</span>
             </button>
           )}
+          <button
+            type="button"
+            onClick={onClear}
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-rose-600 transition cursor-pointer pr-1"
+          >
+            <Icon name="x" className="size-3.5" />
+            <span>Clear</span>
+          </button>
         </div>
       </div>
 

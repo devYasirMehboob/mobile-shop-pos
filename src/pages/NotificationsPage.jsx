@@ -1,54 +1,49 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  Bell, Check, Trash2, Settings, AlertCircle, Info, CheckCircle, 
-  AlertTriangle, RefreshCw, PlusCircle, Search, CheckCheck, RotateCcw, 
-  ChevronLeft, ChevronRight, CheckSquare
-} from 'lucide-react';
-import useNotifications from '../hooks/useNotifications';
-import useAuth from '../hooks/useAuth';
-import usePermissions from '../hooks/usePermissions';
-import NotificationPreferencesDialog from './NotificationPreferencesDialog';
-import AnnouncementModal from './AnnouncementModal';
+import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
+import useNotifications from "../hooks/useNotifications";
+import usePermissions from "../hooks/usePermissions";
+import Icon from "../components/Icon";
+import LoadingState from "../components/LoadingState";
+import EmptyState from "../components/EmptyState";
+import NotificationPreferencesDialog from "./NotificationPreferencesDialog";
+import AnnouncementModal from "./AnnouncementModal";
 
 export default function NotificationsPage() {
-  const { user } = useAuth();
   const { can } = usePermissions();
-  const { 
-    unreadSummary, 
-    notificationsList, 
+  const {
+    unreadSummary,
+    notificationsList,
     pagination,
-    isLoading, 
+    isLoading,
     fetchNotifications,
-    markAsRead, 
+    markAsRead,
     markAsUnread,
-    markAllAsRead, 
+    markAllAsRead,
     dismiss,
     dismissAll,
     resolve,
     triggerEvaluation,
-    createAnnouncement
   } = useNotifications(60);
 
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
-  
+
   // Filters
-  const [search, setSearch] = useState('');
-  const [statusTab, setStatusTab] = useState('all'); // 'all', 'unread', 'read', 'resolved'
-  const [severityFilter, setSeverityFilter] = useState(''); // '', 'critical', 'warning', 'info', 'success'
+  const [search, setSearch] = useState("");
+  const [statusTab, setStatusTab] = useState("all"); // 'all', 'unread', 'read', 'resolved'
+  const [severityFilter, setSeverityFilter] = useState(""); // '', 'critical', 'warning', 'info', 'success'
   const [currentPage, setCurrentPage] = useState(1);
 
   const loadData = useCallback(async () => {
     const params = {
       page: currentPage,
-      limit: 15,
+      limit: 10,
       search: search.trim() || undefined,
       severity: severityFilter || undefined,
     };
 
-    if (statusTab !== 'all') {
+    if (statusTab !== "all") {
       params.status = statusTab;
     }
 
@@ -56,6 +51,7 @@ export default function NotificationsPage() {
   }, [fetchNotifications, currentPage, search, statusTab, severityFilter]);
 
   useEffect(() => {
+    document.title = "Notifications | Dreams POS";
     loadData();
   }, [loadData]);
 
@@ -70,7 +66,7 @@ export default function NotificationsPage() {
   };
 
   const handleSeverityCardClick = (sev) => {
-    setSeverityFilter((prev) => (prev === sev ? '' : sev));
+    setSeverityFilter((prev) => (prev === sev ? "" : sev));
     setCurrentPage(1);
   };
 
@@ -102,35 +98,16 @@ export default function NotificationsPage() {
   };
 
   const handleDismissAll = async () => {
-    if (window.confirm('Are you sure you want to dismiss all notifications?')) {
+    if (window.confirm("Are you sure you want to dismiss all notifications?")) {
       await dismissAll();
       loadData();
     }
   };
 
-  const getIcon = (severity) => {
-    switch (severity) {
-      case 'critical': return <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />;
-      case 'warning': return <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />;
-      case 'success': return <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />;
-      default: return <Info className="w-5 h-5 text-blue-500 shrink-0" />;
-    }
-  };
-
-  const getBgColor = (severity, isUnread) => {
-    if (!isUnread) return 'bg-white';
-    switch (severity) {
-      case 'critical': return 'bg-red-50/70 border-l-4 border-l-red-500';
-      case 'warning': return 'bg-amber-50/70 border-l-4 border-l-amber-500';
-      case 'success': return 'bg-green-50/70 border-l-4 border-l-green-500';
-      default: return 'bg-blue-50/70 border-l-4 border-l-blue-500';
-    }
-  };
-
   const timeAgo = (dateString) => {
-    if (!dateString) return '';
+    if (!dateString) return "";
     const seconds = Math.floor((new Date() - new Date(dateString)) / 1000);
-    if (isNaN(seconds) || seconds < 0) return 'Just now';
+    if (isNaN(seconds) || seconds < 0) return "Just now";
     let interval = seconds / 31536000;
     if (interval > 1) return Math.floor(interval) + " years ago";
     interval = seconds / 2592000;
@@ -145,110 +122,170 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 pb-8">
+      {/* 1. TOP HEADER & BREADCRUMB + ACTION BUTTONS */}
+      <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Notifications</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            View, filter, and manage your system alerts and announcements.
-          </p>
+          <h1 className="text-2xl font-black text-[#0B1E38] tracking-tight">
+            Notifications &amp; Alerts
+          </h1>
+          <nav className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <Link to="/dashboard" className="hover:text-slate-700 transition">
+              Dashboard
+            </Link>
+            <span>›</span>
+            <span className="text-slate-600 font-bold">Notifications</span>
+          </nav>
         </div>
-        
+
+        {/* Action Buttons: Scan, Announcement, Preferences, Mark All Read */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Real-time Scan */}
           <button
+            type="button"
             onClick={handleRefreshScan}
             disabled={isEvaluating}
-            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
             title="Re-evaluate system alerts in real time"
           >
-            <RefreshCw className={`h-4 w-4 ${isEvaluating ? 'animate-spin' : ''}`} />
-            {isEvaluating ? 'Scanning...' : 'Scan Alerts'}
+            <Icon
+              name="refresh"
+              className={`size-3.5 ${
+                isEvaluating ? "animate-spin text-[#FF9F43]" : "text-slate-500"
+              }`}
+            />
+            <span>{isEvaluating ? "Scanning..." : "Scan Alerts"}</span>
           </button>
 
-          {can('notifications.announce') && (
+          {/* New Announcement */}
+          {can("notifications.announce") && (
             <button
+              type="button"
               onClick={() => setIsAnnouncementOpen(true)}
-              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
             >
-              <PlusCircle className="h-4 w-4 text-blue-600" />
-              New Announcement
+              <span className="text-[#FF9F43]">📢</span>
+              <span>Announcement</span>
             </button>
           )}
 
+          {/* Preferences */}
           <button
+            type="button"
             onClick={() => setIsPreferencesOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-extrabold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
           >
-            <Settings className="h-4 w-4" />
-            Preferences
+            <Icon name="settings" className="size-3.5 text-slate-500" />
+            <span>Preferences</span>
           </button>
 
-          {unreadSummary.total > 0 && (
+          {/* Mark All Read */}
+          {unreadSummary?.total > 0 && (
             <button
+              type="button"
               onClick={markAllAsRead}
-              className="flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 hover:bg-[#F38C2A] transition active:scale-95 cursor-pointer"
             >
-              <CheckCheck className="h-4 w-4" />
-              Mark All Read
+              <Icon name="check" className="size-3.5" />
+              <span>Mark All Read</span>
             </button>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Severity Stat Cards (Clickable for Filtering) */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* 2. TOP 4 SEVERITY METRIC CARDS (INTERACTIVE FILTER PILLS) */}
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
-          { key: 'critical', title: 'Critical', count: unreadSummary.critical, icon: AlertCircle, color: 'red', border: 'border-red-200', text: 'text-red-600', activeBg: 'bg-red-50 ring-2 ring-red-500' },
-          { key: 'warning', title: 'Warning', count: unreadSummary.warning, icon: AlertTriangle, color: 'amber', border: 'border-amber-200', text: 'text-amber-500', activeBg: 'bg-amber-50 ring-2 ring-amber-500' },
-          { key: 'info', title: 'Info', count: unreadSummary.info, icon: Info, color: 'blue', border: 'border-blue-200', text: 'text-blue-500', activeBg: 'bg-blue-50 ring-2 ring-blue-500' },
-          { key: 'success', title: 'Success', count: unreadSummary.success, icon: CheckCircle, color: 'green', border: 'border-green-200', text: 'text-green-500', activeBg: 'bg-green-50 ring-2 ring-green-500' },
+          {
+            key: "critical",
+            title: "Critical Alerts",
+            count: unreadSummary?.critical || 0,
+            emoji: "🔴",
+            bg: "bg-rose-50",
+            border: "border-rose-200/80",
+            textColor: "text-rose-600",
+            activeClass: "ring-2 ring-rose-500 bg-rose-50/90",
+          },
+          {
+            key: "warning",
+            title: "Warnings",
+            count: unreadSummary?.warning || 0,
+            emoji: "🟡",
+            bg: "bg-amber-50",
+            border: "border-amber-200/80",
+            textColor: "text-amber-600",
+            activeClass: "ring-2 ring-amber-500 bg-amber-50/90",
+          },
+          {
+            key: "info",
+            title: "System Info",
+            count: unreadSummary?.info || 0,
+            emoji: "🔵",
+            bg: "bg-blue-50",
+            border: "border-blue-200/80",
+            textColor: "text-blue-600",
+            activeClass: "ring-2 ring-blue-500 bg-blue-50/90",
+          },
+          {
+            key: "success",
+            title: "Completed",
+            count: unreadSummary?.success || 0,
+            emoji: "🟢",
+            bg: "bg-emerald-50",
+            border: "border-emerald-200/80",
+            textColor: "text-emerald-600",
+            activeClass: "ring-2 ring-emerald-500 bg-emerald-50/90",
+          },
         ].map((card) => {
-          const IconComp = card.icon;
           const isSelected = severityFilter === card.key;
           return (
             <button
               key={card.key}
               type="button"
               onClick={() => handleSeverityCardClick(card.key)}
-              className={`rounded-xl border bg-white p-4 text-left shadow-sm transition-all hover:border-gray-300 ${
-                isSelected ? card.activeBg : card.border
+              className={`rounded-2xl border p-5 text-left transition-all duration-200 shadow-xs cursor-pointer select-none bg-white hover:shadow-md ${
+                isSelected ? card.activeClass : card.border
               }`}
             >
               <div className="flex items-center justify-between">
-                <div className={`flex items-center gap-2 ${card.text}`}>
-                  <IconComp className="h-5 w-5" />
-                  <h3 className="font-semibold text-sm">{card.title}</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{card.emoji}</span>
+                  <span className="text-xs font-bold text-slate-600">
+                    {card.title}
+                  </span>
                 </div>
                 {isSelected && (
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-gray-900 text-white">
+                  <span className="rounded-md bg-[#0B1E38] px-1.5 py-0.5 text-[9px] font-black uppercase text-white tracking-wider">
                     Filtered
                   </span>
                 )}
               </div>
-              <p className="mt-2 text-2xl font-bold text-gray-900">{card.count}</p>
+              <p className="mt-2 text-2xl font-black text-[#0B1E38] tracking-tight">
+                {card.count}
+              </p>
             </button>
           );
         })}
-      </div>
+      </section>
 
-      {/* Filter Toolbar & Search */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
+      {/* 3. FILTER TABS & KEYWORD SEARCH */}
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Status Tabs */}
-        <div className="flex flex-wrap items-center gap-1 border-b sm:border-b-0 border-gray-200 pb-2 sm:pb-0">
+        <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'unread', label: 'Unread' },
-            { id: 'read', label: 'Read' },
-            { id: 'resolved', label: 'Resolved' },
+            { id: "all", label: "All Alerts" },
+            { id: "unread", label: "Unread" },
+            { id: "read", label: "Read" },
+            { id: "resolved", label: "Resolved" },
           ].map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => handleStatusTabChange(tab.id)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`rounded-xl px-3.5 py-2 text-xs font-extrabold transition cursor-pointer ${
                 statusTab === tab.id
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  ? "bg-[#FF9F43] text-white shadow-sm shadow-orange-500/20"
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100"
               }`}
             >
               {tab.label}
@@ -256,213 +293,218 @@ export default function NotificationsPage() {
           ))}
         </div>
 
-        {/* Search Input & Dismiss All */}
-        <div className="flex items-center gap-3">
+        {/* Search & Actions */}
+        <div className="flex items-center gap-2.5">
           {severityFilter && (
             <button
-              onClick={() => setSeverityFilter('')}
-              className="text-xs text-red-600 hover:underline font-medium"
+              type="button"
+              onClick={() => setSeverityFilter("")}
+              className="text-xs font-extrabold text-rose-600 hover:underline cursor-pointer"
             >
-              Clear severity filter
+              Clear Severity
             </button>
           )}
 
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          <div className="relative w-full sm:w-64">
+            <Icon
+              name="search"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400"
+            />
             <input
               type="text"
               value={search}
               onChange={handleSearchChange}
               placeholder="Search notifications..."
-              className="w-full rounded-lg border border-gray-300 pl-9 pr-3 py-1.5 text-sm text-gray-900 focus:border-gray-900 focus:outline-none"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-9 pr-3 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-2 focus:ring-orange-100"
             />
           </div>
 
-          {notificationsList.length > 0 && (
+          {notificationsList?.length > 0 && (
             <button
+              type="button"
               onClick={handleDismissAll}
-              className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+              className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-400 shadow-2xs hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
               title="Dismiss all shown notifications"
             >
-              <Trash2 className="h-4 w-4" />
+              <Icon name="trash" className="size-4" />
             </button>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Notifications List Container */}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      {/* 4. NOTIFICATIONS LIST CONTAINER */}
+      <section className="rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
         {isLoading ? (
-          <div className="p-12 text-center text-gray-500 flex flex-col items-center justify-center gap-3">
-            <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
-            <span className="text-sm font-medium">Loading notifications...</span>
+          <div className="py-16">
+            <LoadingState label="Scanning system alerts & notifications..." />
           </div>
-        ) : notificationsList.length === 0 ? (
-          <div className="p-12 text-center">
-            <Bell className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">No notifications found</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              {search || statusTab !== 'all' || severityFilter
-                ? 'Try adjusting your search query or severity filters.'
-                : 'All caught up! You have no pending notifications right now.'}
-            </p>
-            <button
-              onClick={handleRefreshScan}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Scan System Alerts
-            </button>
-          </div>
+        ) : !notificationsList || notificationsList.length === 0 ? (
+          <EmptyState
+            icon="bell"
+            title="No notifications found"
+            description="You are all caught up! No active alerts or pending notifications right now."
+          />
         ) : (
-          <ul className="divide-y divide-gray-200">
+          <div className="divide-y divide-slate-100">
             {notificationsList.map((notification) => {
-              const isUnread = !notification.read_at && notification.status !== 'resolved';
-              const isResolved = notification.status === 'resolved';
+              const isUnread = notification.status === "unread";
+              const isResolved = notification.status === "resolved";
+
+              const severityBadge =
+                notification.severity === "critical"
+                  ? "bg-rose-100 text-rose-800 border-rose-200/60"
+                  : notification.severity === "warning"
+                  ? "bg-amber-100 text-amber-800 border-amber-200/60"
+                  : notification.severity === "success"
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-200/60"
+                  : "bg-blue-100 text-blue-800 border-blue-200/60";
 
               return (
-                <li
+                <div
                   key={notification.id}
-                  className={`p-4 sm:px-6 transition-colors ${getBgColor(notification.severity, isUnread)}`}
+                  className={`p-5 transition flex flex-col sm:flex-row sm:items-start justify-between gap-4 hover:bg-slate-50/80 ${
+                    isUnread ? "bg-[#FFF9F3]/60 border-l-4 border-l-[#FF9F43]" : ""
+                  }`}
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="mt-1">
-                      {getIcon(notification.severity)}
-                    </div>
+                  {/* Left: Icon & Details */}
+                  <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white shadow-2xs border border-slate-200/80 text-sm mt-0.5">
+                      {notification.severity === "critical"
+                        ? "🔴"
+                        : notification.severity === "warning"
+                        ? "🟡"
+                        : notification.severity === "success"
+                        ? "🟢"
+                        : "🔵"}
+                    </span>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className={`text-sm text-gray-900 ${isUnread ? 'font-bold' : 'font-semibold'}`}>
-                              {notification.title}
-                            </p>
-                            {notification.module && (
-                              <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-                                {notification.module}
-                              </span>
-                            )}
-                            {isResolved && (
-                              <span className="inline-flex items-center rounded-md bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                                Resolved
-                              </span>
-                            )}
-                          </div>
-                          
-                          <p className="mt-1 text-sm text-gray-600 leading-relaxed">
-                            {notification.message}
-                          </p>
-                        </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong className="text-xs font-black text-[#0B1E38]">
+                          {notification.title}
+                        </strong>
 
-                        <div className="flex items-center justify-between sm:flex-col sm:items-end gap-2 shrink-0">
-                          <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
-                            {timeAgo(notification.created_at)}
-                          </span>
+                        <span
+                          className={`rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${severityBadge}`}
+                        >
+                          {notification.severity}
+                        </span>
 
-                          <div className="flex items-center gap-2">
-                            {/* Read / Unread toggle */}
-                            {isUnread ? (
-                              <button
-                                onClick={() => handleMarkAsRead(notification.id)}
-                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600 transition-colors"
-                                title="Mark as read"
-                              >
-                                <Check className="h-4 w-4" />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleMarkAsUnread(notification.id)}
-                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                                title="Mark as unread"
-                              >
-                                <RotateCcw className="h-4 w-4" />
-                              </button>
-                            )}
-
-                            {/* Resolve button for system alerts if not resolved */}
-                            {!isResolved && can('notifications.resolve') && (
-                              <button
-                                onClick={() => handleResolve(notification.id)}
-                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-green-600 transition-colors"
-                                title="Resolve alert"
-                              >
-                                <CheckSquare className="h-4 w-4" />
-                              </button>
-                            )}
-
-                            {/* Dismiss button */}
-                            <button
-                              onClick={() => handleDismiss(notification.id)}
-                              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 transition-colors"
-                              title="Dismiss notification"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
+                        {isUnread && (
+                          <span className="size-2 rounded-full bg-[#FF9F43] ring-4 ring-orange-100" />
+                        )}
                       </div>
 
-                      {/* Action URL link */}
-                      {notification.action_url && (
-                        <div className="mt-3">
+                      <p className="mt-1 text-xs text-slate-600 font-medium leading-relaxed">
+                        {notification.message}
+                      </p>
+
+                      <div className="mt-2.5 flex items-center gap-3 text-[11px] font-semibold text-slate-400">
+                        <span>{timeAgo(notification.created_at)}</span>
+                        {notification.action_url && (
                           <Link
                             to={notification.action_url}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-gray-900 hover:underline"
+                            className="font-bold text-blue-600 hover:underline"
                           >
-                            View Details &rarr;
+                            View related record →
                           </Link>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
-                </li>
+
+                  {/* Right Actions */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                    {!isResolved && can("notifications.resolve") && (
+                      <button
+                        type="button"
+                        onClick={() => handleResolve(notification.id)}
+                        className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-1.5 text-xs font-extrabold text-emerald-700 hover:bg-emerald-100 transition cursor-pointer"
+                        title="Mark as Resolved"
+                      >
+                        Resolve
+                      </button>
+                    )}
+
+                    {isUnread ? (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkAsRead(notification.id)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                        title="Mark as Read"
+                      >
+                        Mark Read
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkAsUnread(notification.id)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-400 hover:bg-slate-50 transition cursor-pointer"
+                        title="Mark as Unread"
+                      >
+                        Unread
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleDismiss(notification.id)}
+                      className="grid size-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
+                      title="Dismiss"
+                    >
+                      <Icon name="trash" className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
 
-        {/* Pagination Bar */}
-        {pagination.total_pages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
-            <div className="text-xs text-gray-500">
-              Showing Page <span className="font-semibold">{pagination.page}</span> of{' '}
-              <span className="font-semibold">{pagination.total_pages}</span> ({pagination.total} total)
-            </div>
+        {/* Footer Pagination */}
+        {pagination && pagination.total_pages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-100 p-4 text-xs font-semibold text-slate-500">
+            <span>
+              Page {pagination.page} of {pagination.total_pages}
+            </span>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                type="button"
                 disabled={pagination.page <= 1}
-                className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
               >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
+                ‹
               </button>
-
               <button
-                onClick={() => setCurrentPage((p) => Math.min(pagination.total_pages, p + 1))}
+                type="button"
                 disabled={pagination.page >= pagination.total_pages}
-                className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
               >
-                Next
-                <ChevronRight className="h-4 w-4" />
+                ›
               </button>
             </div>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Preferences Dialog */}
-      <NotificationPreferencesDialog 
-        isOpen={isPreferencesOpen} 
-        onClose={() => setIsPreferencesOpen(false)} 
+      {/* PREFERENCES DIALOG */}
+      <NotificationPreferencesDialog
+        isOpen={isPreferencesOpen}
+        onClose={() => setIsPreferencesOpen(false)}
       />
 
-      {/* Announcement Modal */}
+      {/* ANNOUNCEMENT MODAL */}
       <AnnouncementModal
         isOpen={isAnnouncementOpen}
         onClose={() => setIsAnnouncementOpen(false)}
-        onSubmit={createAnnouncement}
+        onSubmit={async (payload) => {
+          const res = await createAnnouncement(payload);
+          loadData();
+          return res;
+        }}
       />
     </div>
   );

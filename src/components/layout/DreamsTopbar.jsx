@@ -99,19 +99,7 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
           <Icon name="menu" className="size-5" />
         </button>
 
-        {/* Desktop Orange Collapse Chevron Button (Dreams POS style) */}
-        <button
-          type="button"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="hidden lg:flex size-7 items-center justify-center rounded-full bg-[#FF9F43] text-white shadow-md shadow-orange-500/20 transition-all hover:scale-105 hover:bg-[#F38C2A] active:scale-95 shrink-0"
-          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label="Toggle sidebar"
-        >
-          <Icon
-            name={isCollapsed ? "chevrons-right" : "chevrons-left"}
-            className="size-4"
-          />
-        </button>
+
 
         {/* Global Search Box */}
         <div className="relative flex-1 max-w-xs sm:max-w-sm">

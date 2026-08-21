@@ -3,14 +3,15 @@ import InlineError from "../feedback/InlineError";
 function SettingField({ field, value, error, onChange, disabled }) {
   const [key, label, type, options] = field;
   const id = `setting-${key}`;
+
   if (type === "toggle") {
     return (
       <label
         htmlFor={id}
-        className="flex min-h-[72px] cursor-pointer items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 transition-colors hover:bg-slate-100/70"
+        className="flex min-h-[64px] cursor-pointer items-center justify-between gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 transition-colors hover:bg-slate-100/70"
       >
-        <span className="flex flex-col gap-1">
-          <strong className="text-[13px] font-bold text-slate-900">
+        <span className="flex flex-col gap-0.5">
+          <strong className="text-xs font-bold text-[#0B1E38]">
             {label}
           </strong>
           {error && <InlineError error={error} />}
@@ -21,16 +22,18 @@ function SettingField({ field, value, error, onChange, disabled }) {
           checked={Boolean(value)}
           disabled={disabled}
           onChange={(e) => onChange(key, e.target.checked)}
-          className="size-5 rounded border-slate-300 text-blue-600 transition focus:ring-blue-500 disabled:opacity-50"
+          className="size-5 rounded-md border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer disabled:opacity-50"
         />
       </label>
     );
   }
+
   const base =
-    "min-h-12 w-full rounded-xl border bg-slate-50 px-4 text-[13px] font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 disabled:opacity-50 hover:bg-white hover:border-slate-300";
+    "min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 disabled:opacity-50 hover:border-slate-300";
+
   return (
     <label htmlFor={id} className="flex flex-col gap-1.5">
-      <span className="ml-1 text-[11px] font-extrabold uppercase tracking-widest text-slate-500">
+      <span className="text-[11px] font-extrabold text-slate-700">
         {label}
       </span>
       {type === "textarea" ? (
@@ -40,9 +43,9 @@ function SettingField({ field, value, error, onChange, disabled }) {
           value={value ?? ""}
           disabled={disabled}
           onChange={(e) => onChange(key, e.target.value)}
-          className={`${base} py-3 ${
+          className={`${base} py-2.5 resize-none ${
             error
-              ? "border-red-400 focus:border-red-500 focus:ring-red-500/10"
+              ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100"
               : "border-slate-200"
           }`}
         />
@@ -52,29 +55,28 @@ function SettingField({ field, value, error, onChange, disabled }) {
           value={value ?? ""}
           disabled={disabled}
           onChange={(e) => onChange(key, e.target.value)}
-          className={`${base} ${
+          className={`${base} cursor-pointer ${
             error
-              ? "border-red-400 focus:border-red-500 focus:ring-red-500/10"
+              ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100"
               : "border-slate-200"
           }`}
         >
-          {options.map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
+          {options.map(([optVal, optLabel]) => (
+            <option key={optVal} value={optVal}>
+              {optLabel}
             </option>
           ))}
         </select>
       ) : (
         <input
           id={id}
-          type={type}
-          step={type === "number" ? "any" : undefined}
+          type={type || "text"}
           value={value ?? ""}
           disabled={disabled}
           onChange={(e) => onChange(key, e.target.value)}
           className={`${base} ${
             error
-              ? "border-red-400 focus:border-red-500 focus:ring-red-500/10"
+              ? "border-rose-400 focus:border-rose-500 focus:ring-rose-100"
               : "border-slate-200"
           }`}
         />
@@ -83,4 +85,5 @@ function SettingField({ field, value, error, onChange, disabled }) {
     </label>
   );
 }
+
 export default SettingField;

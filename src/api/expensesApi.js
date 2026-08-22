@@ -308,3 +308,16 @@ export async function deleteExpenseCategory(id) {
 export async function exportExpenses(params = {}) {
   return apiClient.get("/expenses/export", { params, responseType: "blob" });
 }
+
+export function receiptUrl(path) {
+  if (!path) return "";
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("blob:") ||
+    path.startsWith("data:")
+  ) {
+    return path;
+  }
+  return path;
+}

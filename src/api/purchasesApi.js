@@ -466,6 +466,89 @@ export async function createPurchaseReturn(values) {
   return (await apiClient.post("/purchase-returns", values)).data;
 }
 
+export async function completeDraftPurchase(id, values = {}) {
+  if (isSupabaseConfigured()) {
+    const purchaseId = Number(id);
+    const { data: purchase, error } = await supabase
+      .from("purchases")
+      .update({
+        purchase_status: "received",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", purchaseId)
+      .select("*, suppliers:supplier_id (name, phone), items:purchase_items (*)")
+      .single();
+
+    if (error) throw new Error(error.message);
+    return { success: true, message: "Draft purchase completed and stock received.", data: purchase };
+  }
+
+  return (await apiClient.post(`/purchases/drafts/${id}/complete`, values)).data;
+}
+
+export async function updateDraftPurchase(id, values) {
+  if (isSupabaseConfigured()) {
+    const purchaseId = Number(id);
+    const { data: purchase, error } = await supabase
+      .from("purchases")
+      .update({
+        supplier_id: Number(values.supplier_id),
+        supplier_invoice_number: values.supplier_invoice_number || null,
+        purchase_date: values.purchase_date,
+        discount_amount: parseFloat(values.overall_discount || 0),
+        tax_amount: parseFloat(values.tax || 0),
+        shipping_amount: parseFloat(values.shipping_amount || 0),
+        other_charges: parseFloat(values.other_charges || 0),
+        notes: values.notes || "",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", purchaseId)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return { success: true, message: "Draft purchase updated.", data: purchase };
+  }
+
+  return (await apiClient.put(`/purchases/drafts/${id}`, values)).data;
+}
+
+export async function getReturnableItems(id) {
+  if (isSupabaseConfigured()) {
+    const purchaseId = Number(id);
+    const { data: purchase, error } = await supabase
+      .from("purchases")
+      .select("*, suppliers:supplier_id (name, phone), items:purchase_items (*)")
+      .eq("id", purchaseId)
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    return {
+      purchase,
+      items: purchase?.items || [],
+    };
+  }
+
+  return (await apiClient.get(`/purchases/${id}/returnable-items`)).data.data;
+}
+
+export async function getPurchaseReturn(id) {
+  if (isSupabaseConfigured()) {
+    const { data, error } = await supabase
+      .from("purchase_returns")
+      .select("*, purchases:purchase_id (*), suppliers:supplier_id (*)")
+      .eq("id", Number(id))
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  return (await apiClient.get(`/purchase-returns/${id}`)).data.data;
+}
+
 export async function exportPurchases(params = {}) {
   return apiClient.get("/purchases/export", { params, responseType: "blob" });
 }
+

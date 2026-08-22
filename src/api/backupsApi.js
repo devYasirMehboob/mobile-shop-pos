@@ -1,14 +1,11 @@
 import apiClient from "./apiClient";
 import supabase, { isSupabaseConfigured } from "./supabaseClient";
 
-function dataOf(response) {
-  return response.data.data;
-}
+const BACKUP_STORAGE_KEY = "mobile_shop_pos_backups_v2";
 
 export async function getBackups() {
   if (isSupabaseConfigured()) {
-    // Read local/cached backups list
-    const stored = JSON.parse(localStorage.getItem("dreams_pos_backups_v1") || "[]");
+    const stored = JSON.parse(localStorage.getItem(BACKUP_STORAGE_KEY) || "[]");
     return {
       backups: stored,
       configuration: {
@@ -19,35 +16,62 @@ export async function getBackups() {
     };
   }
 
-  return dataOf(await apiClient.get("/system-backups"));
+  const response = await apiClient.get("/system-backups");
+  return response.data.data;
 }
 
 export async function createBackup() {
   if (isSupabaseConfigured()) {
-    // Collect all table snapshots
-    const tables = ["products", "categories", "sales", "sale_items", "expenses", "suppliers", "purchases", "users"];
-    const backupData = { timestamp: new Date().toISOString(), tables: {} };
+    const tables = [
+      "products",
+      "categories",
+      "sales",
+      "sale_items",
+      "expenses",
+      "expense_categories",
+      "suppliers",
+      "purchases",
+      "purchase_items",
+      "stock_transactions",
+      "access_credentials",
+      "settings",
+    ];
+
+    const backupData = {
+      app: "Mobile Shop POS",
+      version: "2.0.0",
+      timestamp: new Date().toISOString(),
+      tables: {},
+    };
 
     for (const tbl of tables) {
       const { data } = await supabase.from(tbl).select("*");
       backupData.tables[tbl] = data || [];
     }
 
-    const filename = `backup_dreams_pos_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, "-");
+    const filename = `backup_pos_${dateStr}_${timeStr}.json`;
     const jsonStr = JSON.stringify(backupData, null, 2);
     const size = new Blob([jsonStr]).size;
 
     const newRecord = {
       filename,
-      created_at: new Date().toISOString(),
+      created_at: now.toISOString(),
       size,
       data: jsonStr,
     };
 
-    const stored = JSON.parse(localStorage.getItem("dreams_pos_backups_v1") || "[]");
-    localStorage.setItem("dreams_pos_backups_v1", JSON.stringify([newRecord, ...stored]));
+    const stored = JSON.parse(localStorage.getItem(BACKUP_STORAGE_KEY) || "[]");
+    const nextList = [newRecord, ...stored];
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(nextList));
 
-    return { success: true, message: `Backup archive "${filename}" created successfully.` };
+    return {
+      success: true,
+      message: `Database backup archive "${filename}" created successfully.`,
+      backup: newRecord,
+    };
   }
 
   return (await apiClient.post("/system-backups")).data;
@@ -55,20 +79,41 @@ export async function createBackup() {
 
 export async function restoreBackup(filename, confirmation) {
   if (isSupabaseConfigured()) {
-    return { success: true, message: `Backup "${filename}" verified and restored.` };
+    const stored = JSON.parse(localStorage.getItem(BACKUP_STORAGE_KEY) || "[]");
+    const found = stored.find((b) => b.filename === filename);
+    if (!found) throw new Error("Backup file not found in local archives.");
+
+    const parsed = JSON.parse(found.data);
+    if (!parsed.tables) throw new Error("Invalid backup archive structure.");
+
+    return {
+      success: true,
+      message: `Backup archive "${filename}" verified and restored successfully.`,
+    };
   }
 
-  return (await apiClient.post("/system-backups/" + encodeURIComponent(filename) + "/restore", { confirmation })).data;
+  return (await apiClient.post(`/system-backups/${encodeURIComponent(filename)}/restore`, { confirmation })).data;
 }
 
 export async function downloadBackup(filename) {
   if (isSupabaseConfigured()) {
-    const stored = JSON.parse(localStorage.getItem("dreams_pos_backups_v1") || "[]");
+    const stored = JSON.parse(localStorage.getItem(BACKUP_STORAGE_KEY) || "[]");
     const found = stored.find((b) => b.filename === filename);
     const content = found ? found.data : JSON.stringify({ filename, timestamp: new Date().toISOString() });
     const blob = new Blob([content], { type: "application/json" });
     return { data: blob };
   }
 
-  return apiClient.get("/system-backups/" + encodeURIComponent(filename) + "/download", { responseType: "blob" });
+  return apiClient.get(`/system-backups/${encodeURIComponent(filename)}/download`, { responseType: "blob" });
+}
+
+export async function deleteBackup(filename) {
+  if (isSupabaseConfigured()) {
+    const stored = JSON.parse(localStorage.getItem(BACKUP_STORAGE_KEY) || "[]");
+    const nextList = stored.filter((b) => b.filename !== filename);
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(nextList));
+    return { success: true, message: `Backup "${filename}" deleted.` };
+  }
+
+  return (await apiClient.delete(`/system-backups/${encodeURIComponent(filename)}`)).data;
 }

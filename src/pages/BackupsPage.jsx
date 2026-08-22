@@ -5,6 +5,7 @@ import {
   downloadBackup,
   getBackups,
   restoreBackup,
+  deleteBackup,
 } from "../api/backupsApi";
 import EmptyState from "../components/EmptyState";
 import Icon from "../components/Icon";
@@ -51,30 +52,7 @@ function BackupsPage() {
     setLoading(true);
     try {
       const data = await getBackups();
-      let list = data.backups || [];
-
-      // Demo fallback backup archives if fresh environment
-      if (list.length === 0) {
-        list = [
-          {
-            filename: "backup_dreams_pos_2024-12-24_full.json",
-            created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
-            size: 4892000,
-          },
-          {
-            filename: "backup_dreams_pos_2024-12-20_full.json",
-            created_at: new Date(Date.now() - 3600000 * 96).toISOString(),
-            size: 4720000,
-          },
-          {
-            filename: "backup_dreams_pos_2024-12-15_full.json",
-            created_at: new Date(Date.now() - 3600000 * 216).toISOString(),
-            size: 4450000,
-          },
-        ];
-      }
-
-      setBackups(list);
+      setBackups(data.backups || []);
       if (data.configuration) setConfiguration(data.configuration);
     } catch (error) {
       alert.error(normalizeApiError(error).message);
@@ -82,6 +60,17 @@ function BackupsPage() {
       setLoading(false);
     }
   }, [alert]);
+
+  async function handleDelete(filename) {
+    if (!window.confirm(`Are you sure you want to delete backup "${filename}"?`)) return;
+    try {
+      await deleteBackup(filename);
+      alert.success("Backup deleted successfully.");
+      await load();
+    } catch (error) {
+      alert.error(normalizeApiError(error).message);
+    }
+  }
 
   useEffect(() => {
     document.title = "Database Backups | Dreams POS";
@@ -366,6 +355,16 @@ function BackupsPage() {
                             <span>Restore</span>
                           </button>
                         )}
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(backup.filename)}
+                          className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-400 shadow-2xs hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
+                          title="Delete Backup"
+                        >
+                          <Icon name="trash" className="size-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>

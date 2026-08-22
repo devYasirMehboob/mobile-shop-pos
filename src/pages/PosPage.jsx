@@ -293,25 +293,41 @@ function PosPage() {
       const payload = {
         items: cart.items.map((i) => ({
           product_id: i.id,
+          id: i.id,
+          name: i.name,
+          product_name: i.name,
+          product_code: i.product_code || i.barcode || `PRD-${i.id}`,
           quantity: i.cartQuantity,
-          selling_price: i.selling_price,
-          unit_cost: i.purchase_cost || 0,
+          unit_price: Number(i.selling_price || 0),
+          selling_price: Number(i.selling_price || 0),
+          purchase_cost: Number(i.purchase_cost || 0),
+          line_total: i.cartQuantity * Number(i.selling_price || 0),
         })),
         subtotal: totals.subtotal,
         discount_type: discountType,
         discount_value: Number(discountValue) || 0,
+        discount_amount: totals.discount,
         tax_amount: totals.tax,
-        total_amount: totals.grandTotal,
-        payment_method: payment.payment_method,
+        grand_total: totals.grandTotal,
+        payment_method: payment.payment_method || "cash",
         amount_received: Number(payment.amount_received || totals.grandTotal),
+        change_returned: Math.max(0, Number(payment.amount_received || totals.grandTotal) - totals.grandTotal),
         customer_name: payment.customer_name || "Walk-in Customer",
         customer_phone: payment.customer_phone || "",
-        note: payment.note || "",
+        notes: payment.note || "",
         held_sale_id: activeHeldSaleId,
       };
 
       const response = await completeSale(payload);
-      setSavedSale(response.data?.sale || response.data);
+      const returnedSale = response.data?.sale || response.data || {
+        id: response.data?.id,
+        invoice_number: response.data?.invoice_number,
+        grand_total: totals.grandTotal,
+        amount_received: Number(payment.amount_received || totals.grandTotal),
+        change_returned: Math.max(0, Number(payment.amount_received || totals.grandTotal) - totals.grandTotal),
+        payment_method: payment.payment_method || "cash",
+      };
+      setSavedSale(returnedSale);
 
       if (receiptSettings.auto_print && response.data?.sale?.id) {
         const savedReceipt = await getSaleReceipt(response.data.sale.id);

@@ -77,18 +77,33 @@ export async function getUser(id) {
 
 export async function createUser(data) {
   if (isSupabaseConfigured()) {
+    // Determine next available ID to prevent sequence collision with seeded records
+    const { data: maxRows } = await supabase
+      .from("access_credentials")
+      .select("id")
+      .order("id", { ascending: false })
+      .limit(1);
+
+    const nextId = maxRows && maxRows.length > 0 ? Number(maxRows[0].id) + 1 : 1;
+
+    // Fallback email if user left it blank, ensuring unique constraint is satisfied
+    const generatedEmail =
+      data.email?.trim() ||
+      `${data.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "user"}${Date.now().toString().slice(-4)}@mobileshop.local`;
+
+    const payload = {
+      id: nextId,
+      name: data.name,
+      email: generatedEmail,
+      phone: data.phone || null,
+      password_hash: data.password,
+      role: data.role || "cashier",
+      is_active: data.status === "inactive" ? 0 : 1,
+    };
+
     const { data: newUser, error } = await supabase
       .from("access_credentials")
-      .insert([
-        {
-          name: data.name,
-          email: data.email || null,
-          phone: data.phone || null,
-          password_hash: data.password,
-          role: data.role || "cashier",
-          is_active: data.status === "inactive" ? 0 : 1,
-        },
-      ])
+      .insert([payload])
       .select()
       .single();
 
@@ -158,6 +173,68 @@ export async function resetUserPassword(id, data) {
   }
 
   const response = await apiClient.post(`/users/${id}/reset-password`, data);
+  return response.data;
+}
+
+export async function updateMyProfile(id, { name, email, phone }) {
+  if (isSupabaseConfigured()) {
+    const { data: updated, error } = await supabase
+      .from("access_credentials")
+      .update({
+        name,
+        email: email?.trim() || null,
+        phone: phone || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", Number(id))
+      .select("id, name, email, phone, role, is_active")
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    // Sync localStorage
+    const cached = localStorage.getItem("mobile_pos_user");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        localStorage.setItem("mobile_pos_user", JSON.stringify({ ...parsed, ...updated }));
+      } catch {}
+    }
+
+    return { success: true, message: "Profile updated successfully.", data: updated };
+  }
+
+  const response = await apiClient.put(`/users/${id}`, { name, email, phone });
+  return response.data;
+}
+
+export async function changeMyPassword(id, { current_password, new_password }) {
+  if (isSupabaseConfigured()) {
+    const { data: userRecord, error: userErr } = await supabase
+      .from("access_credentials")
+      .select("id, password_hash")
+      .eq("id", Number(id))
+      .single();
+
+    if (userErr) throw new Error(userErr.message);
+
+    if (userRecord.password_hash && userRecord.password_hash !== current_password) {
+      throw new Error("Current password is incorrect.");
+    }
+
+    const { error } = await supabase
+      .from("access_credentials")
+      .update({ password_hash: new_password, updated_at: new Date().toISOString() })
+      .eq("id", Number(id));
+
+    if (error) throw new Error(error.message);
+    return { success: true, message: "Password changed successfully." };
+  }
+
+  const response = await apiClient.post(`/users/${id}/change-password`, {
+    current_password,
+    new_password,
+  });
   return response.data;
 }
 

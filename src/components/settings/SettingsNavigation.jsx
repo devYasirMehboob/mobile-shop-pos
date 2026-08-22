@@ -1,6 +1,7 @@
 import Icon from "../Icon";
 
 const sectionIcons = {
+  profile: "user",
   shop: "store",
   localization: "globe",
   tax: "percent",

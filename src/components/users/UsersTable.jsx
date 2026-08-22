@@ -1,5 +1,5 @@
+import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
-import StatusBadge from "../StatusBadge";
 
 function formatDate(value) {
   if (!value) return "Never";
@@ -29,12 +29,26 @@ function UsersTable({
   onPermissions,
   onDelete,
 }) {
+  const [activeMenuId, setActiveMenuId] = useState(null);
+  const menuRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setActiveMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto min-h-[320px]">
       <table className="min-w-full text-left text-xs">
         <thead className="bg-[#F8F9FA] text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200/70">
           <tr>
-            <th className="px-5 py-3.5">User Identity</th>
+            <th className="px-5 py-3.5">User</th>
             <th className="px-4 py-3.5">Contact</th>
             <th className="px-4 py-3.5">Assigned Role</th>
             <th className="px-4 py-3.5">Status</th>
@@ -46,17 +60,16 @@ function UsersTable({
         <tbody className="divide-y divide-slate-100 font-medium">
           {users.map((user) => {
             const isSelf = Number(user.id) === Number(currentUserId);
+            const isMenuOpen = activeMenuId === user.id;
             const roleBadgeClass =
-              roleBadges[user.role?.toLowerCase()] || "bg-slate-50 text-slate-700 border-slate-200";
+              roleBadges[user.role?.toLowerCase()] ||
+              "bg-slate-50 text-slate-700 border-slate-200";
 
             return (
               <tr key={user.id} className="transition hover:bg-slate-50/80">
                 {/* User Identity */}
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-orange-100 to-amber-50 text-xs font-black text-[#FF9F43] border border-orange-200/60 shadow-2xs">
-                      {user.name ? user.name.charAt(0).toUpperCase() : "U"}
-                    </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <strong className="block text-sm font-black text-[#0B1E38]">
@@ -79,12 +92,16 @@ function UsersTable({
                 <td className="px-4 py-4">
                   <div className="text-slate-600 space-y-0.5">
                     {user.email ? (
-                      <span className="block text-slate-700 font-semibold">{user.email}</span>
+                      <span className="block text-slate-700 font-semibold">
+                        {user.email}
+                      </span>
                     ) : (
                       <span className="text-slate-300 italic">No email</span>
                     )}
                     {user.phone && (
-                      <span className="block text-[11px] font-mono text-slate-400">{user.phone}</span>
+                      <span className="block text-[11px] font-mono text-slate-400">
+                        {user.phone}
+                      </span>
                     )}
                   </div>
                 </td>
@@ -99,9 +116,38 @@ function UsersTable({
                   </span>
                 </td>
 
-                {/* Status */}
-                <td className="px-4 py-4">
-                  <StatusBadge status={user.status || "active"} />
+                {/* Interactive Status Toggle */}
+                <td className="px-4 py-4 whitespace-nowrap">
+                  <button
+                    type="button"
+                    disabled={isSelf}
+                    onClick={() => onStatus(user)}
+                    title={
+                      isSelf
+                        ? "Cannot change own account status"
+                        : user.status === "active"
+                          ? "Click to deactivate user"
+                          : "Click to activate user"
+                    }
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase border transition shadow-2xs ${
+                      isSelf
+                        ? "opacity-60 cursor-not-allowed bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                        : user.status === "active"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 cursor-pointer group"
+                          : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 cursor-pointer group"
+                    }`}
+                  >
+                    <span
+                      className={`size-1.5 rounded-full transition-colors ${
+                        user.status === "active"
+                          ? "bg-emerald-500 group-hover:bg-rose-500"
+                          : "bg-slate-400 group-hover:bg-emerald-500"
+                      }`}
+                    />
+                    <span>
+                      {user.status === "active" ? "Active" : "Inactive"}
+                    </span>
+                  </button>
                 </td>
 
                 {/* Last Login */}
@@ -109,76 +155,118 @@ function UsersTable({
                   {formatDate(user.last_login_at)}
                 </td>
 
-                {/* Actions */}
+                {/* Actions: Direct View Icon + 3-Dots Dropdown */}
                 <td className="px-5 py-4 text-right whitespace-nowrap">
-                  <div className="flex items-center justify-end gap-1">
-                    {/* View Details */}
+                  <div className="flex items-center justify-end gap-1.5">
+                    {/* 1. Direct View Details Icon */}
                     <button
                       type="button"
                       onClick={() => onView(user)}
-                      className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition cursor-pointer"
+                      className="grid size-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:border-[#FF9F43] hover:bg-orange-50/40 hover:text-[#FF9F43] transition cursor-pointer"
                       title="View Details"
                     >
                       <Icon name="eye" className="size-3.5" />
                     </button>
 
-                    {/* Edit */}
-                    <button
-                      type="button"
-                      onClick={() => onEdit(user)}
-                      className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:border-orange-200 hover:bg-orange-50 hover:text-[#FF9F43] transition cursor-pointer"
-                      title="Edit User"
+                    {/* 2. Actions Dropdown */}
+                    <div
+                      className="relative inline-block text-left"
+                      ref={isMenuOpen ? menuRef : null}
                     >
-                      <Icon name="edit" className="size-3.5" />
-                    </button>
-
-                    {/* Permissions */}
-                    <button
-                      type="button"
-                      onClick={() => onPermissions(user)}
-                      className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:border-purple-200 hover:bg-purple-50 hover:text-purple-600 transition cursor-pointer"
-                      title="Custom Permissions"
-                    >
-                      <Icon name="key" className="size-3.5" />
-                    </button>
-
-                    {/* Reset Password */}
-                    <button
-                      type="button"
-                      onClick={() => onReset(user)}
-                      className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 transition cursor-pointer"
-                      title="Reset Password"
-                    >
-                      <Icon name="lock" className="size-3.5" />
-                    </button>
-
-                    {/* Status Toggle */}
-                    <button
-                      type="button"
-                      disabled={isSelf}
-                      onClick={() => onStatus(user)}
-                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase transition cursor-pointer ${
-                        isSelf
-                          ? "opacity-30 cursor-not-allowed bg-slate-100 text-slate-400"
-                          : user.status === "active"
-                          ? "border border-amber-200/80 bg-amber-50 text-amber-700 hover:bg-amber-100 shadow-2xs"
-                          : "border border-emerald-200/80 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-2xs"
-                      }`}
-                    >
-                      {user.status === "active" ? "Deactivate" : "Activate"}
-                    </button>
-
-                    {/* Delete */}
-                    {onDelete && !isSelf && (
+                      {/* Trigger Button */}
                       <button
                         type="button"
-                        onClick={() => onDelete(user)}
-                        className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-400 shadow-2xs hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
-                        title="Delete User"
+                        onClick={() =>
+                          setActiveMenuId((prev) =>
+                            prev === user.id ? null : user.id,
+                          )
+                        }
+                        className={`grid size-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:border-[#FF9F43] hover:bg-orange-50/50 hover:text-[#FF9F43] transition cursor-pointer ${
+                          isMenuOpen
+                            ? "border-[#FF9F43] bg-orange-50/70 text-[#FF9F43] ring-2 ring-orange-100"
+                            : ""
+                        }`}
+                        title="More Actions"
                       >
-                        <Icon name="trash" className="size-3.5" />
+                        <span className="text-sm font-black leading-none select-none">
+                          ⋮
+                        </span>
                       </button>
-                    )}
+
+                      {/* Dropdown Floating Menu */}
+                      {isMenuOpen && (
+                        <div className="absolute right-8 top-0 z-50 w-48 rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl transition-all animate-in fade-in zoom-in-95 duration-100 text-left">
+                          {/* Edit User */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              onEdit(user);
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-orange-50 hover:text-[#FF9F43] transition cursor-pointer"
+                          >
+                            <Icon
+                              name="edit"
+                              className="size-3.5 text-[#FF9F43]"
+                            />
+                            <span>Edit User</span>
+                          </button>
+
+                          {/* Custom Permissions */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              onPermissions(user);
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-purple-50 hover:text-purple-700 transition cursor-pointer"
+                          >
+                            <Icon
+                              name="key"
+                              className="size-3.5 text-purple-600"
+                            />
+                            <span>Permissions</span>
+                          </button>
+
+                          {/* Reset Password */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuId(null);
+                              onReset(user);
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition cursor-pointer"
+                          >
+                            <Icon
+                              name="lock"
+                              className="size-3.5 text-blue-600"
+                            />
+                            <span>Reset Password</span>
+                          </button>
+
+                          {/* Delete User */}
+                          {onDelete && !isSelf && (
+                            <>
+                              <div className="my-1 border-t border-slate-100" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  onDelete(user);
+                                }}
+                                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                              >
+                                <Icon
+                                  name="trash"
+                                  className="size-3.5 text-rose-500"
+                                />
+                                <span>Delete Account</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </td>
               </tr>

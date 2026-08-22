@@ -55,7 +55,7 @@ const sidebarGroups = [
       { label: "Reports", path: "/reports", icon: "reports", permission: "reports.view" },
       { label: "Notifications", path: "/notifications", icon: "bell", permission: "notifications.view" },
       { label: "Backups", path: "/backups", icon: "backups", permission: "backups.create" },
-      { label: "Settings", path: "/settings", icon: "settings", permission: "settings.manage" },
+      { label: "Settings", path: "/settings", icon: "settings" },
     ],
   },
 ];

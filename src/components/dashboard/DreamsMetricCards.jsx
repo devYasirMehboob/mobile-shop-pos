@@ -7,8 +7,8 @@ export default function DreamsMetricCards({ summary = {} }) {
   const topCards = [
     {
       label: "Total Sales",
-      value: formatCurrency(summary.total_sales || 48988078),
-      badge: "+22%",
+      value: formatCurrency(summary.total_sales ?? 0),
+      badge: summary.today_orders ? `+${summary.today_orders} today` : "Live",
       badgePositive: true,
       bg: "bg-[#FF9F43]",
       iconBg: "bg-white/20 text-white",
@@ -18,19 +18,19 @@ export default function DreamsMetricCards({ summary = {} }) {
     },
     {
       label: "Total Sales Return",
-      value: formatCurrency(summary.total_sales_return || 16478145),
-      badge: "-22%",
-      badgePositive: false,
+      value: formatCurrency(summary.total_sales_return ?? 0),
+      badge: "Invoices",
+      badgePositive: true,
       bg: "bg-[#0E2040]",
       iconBg: "bg-white/15 text-white",
-      badgeBg: "bg-white/20 text-red-200",
+      badgeBg: "bg-white/20 text-slate-200",
       icon: "refund",
-      link: "/sales",
+      link: "/sales?tab=returns",
     },
     {
       label: "Total Purchase",
-      value: formatCurrency(summary.total_purchase || 24145789),
-      badge: "+22%",
+      value: formatCurrency(summary.total_purchase ?? 0),
+      badge: "Stock In",
       badgePositive: true,
       bg: "bg-[#0E9384]",
       iconBg: "bg-white/20 text-white",
@@ -40,8 +40,8 @@ export default function DreamsMetricCards({ summary = {} }) {
     },
     {
       label: "Total Purchase Return",
-      value: formatCurrency(summary.total_purchase_return || 18458747),
-      badge: "-22%",
+      value: formatCurrency(summary.total_purchase_return ?? 0),
+      badge: "Refunds",
       badgePositive: false,
       bg: "bg-[#1D6AE5]",
       iconBg: "bg-white/20 text-white",
@@ -54,40 +54,40 @@ export default function DreamsMetricCards({ summary = {} }) {
   // Bottom Row 4 White Cards
   const bottomCards = [
     {
-      title: "Profit",
-      value: formatCurrency(summary.today_profit || 8458798),
-      trend: "+35% vs Last Month",
-      trendPositive: true,
+      title: "Today's Profit",
+      value: formatCurrency(summary.today_profit ?? 0),
+      trend: "Net revenue today",
+      trendPositive: Number(summary.today_profit || 0) >= 0,
       icon: "profit",
       iconColor: "text-cyan-500 bg-cyan-50",
       link: "/reports",
     },
     {
-      title: "Invoice Due",
-      value: formatCurrency(summary.invoice_due || 48988.78),
-      trend: "-19% vs Last Month",
-      trendPositive: false,
+      title: "Supplier Due",
+      value: formatCurrency(summary.invoice_due ?? 0),
+      trend: "Payable balance",
+      trendPositive: Number(summary.invoice_due || 0) <= 0,
       icon: "clock",
       iconColor: "text-teal-600 bg-teal-50",
-      link: "/sales",
+      link: "/purchases",
     },
     {
       title: "Total Expenses",
-      value: formatCurrency(summary.total_expenses || 8980097),
-      trend: "+41% vs Last Month",
+      value: formatCurrency(summary.total_expenses ?? 0),
+      trend: "Store operations",
       trendPositive: true,
       icon: "expenses",
       iconColor: "text-orange-500 bg-orange-50",
       link: "/expenses",
     },
     {
-      title: "Total Payment Returns",
-      value: formatCurrency(summary.total_payment_returns || 78458798),
-      trend: "-20% vs Last Month",
-      trendPositive: false,
-      icon: "card",
+      title: "Low Stock Items",
+      value: `${summary.low_stock_count ?? 0} Products`,
+      trend: "Reorder required",
+      trendPositive: Number(summary.low_stock_count || 0) === 0,
+      icon: "inventory",
       iconColor: "text-purple-600 bg-purple-50",
-      link: "/sales",
+      link: "/inventory",
     },
   ];
 
@@ -99,75 +99,74 @@ export default function DreamsMetricCards({ summary = {} }) {
           <Link
             key={card.label}
             to={card.link}
-            className={`group relative overflow-hidden rounded-2xl ${card.bg} p-5 text-white shadow-sm transition hover:shadow-md hover:scale-[1.01]`}
+            className={`group relative overflow-hidden rounded-2xl ${card.bg} p-5 text-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md cursor-pointer`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3.5">
-                <span
-                  className={`grid size-12 shrink-0 place-items-center rounded-xl ${card.iconBg} shadow-xs`}
-                >
-                  <Icon name={card.icon} className="size-6 text-white" />
-                </span>
-                <div>
-                  <span className="block text-xs font-semibold text-white/80">
-                    {card.label}
-                  </span>
-                  <strong className="mt-1 block text-lg sm:text-xl font-black tracking-tight">
-                    {card.value}
-                  </strong>
-                </div>
+            {/* Background pattern circles */}
+            <div className="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-white/10" />
+            <div className="pointer-events-none absolute -right-2 -bottom-4 size-16 rounded-full bg-white/5" />
+
+            <div className="relative z-10 flex items-start justify-between">
+              <div>
+                <span className="text-xs font-bold text-white/80">{card.label}</span>
+                <h3 className="mt-1 text-xl sm:text-2xl font-black tracking-tight text-white">
+                  {card.value}
+                </h3>
               </div>
 
-              {/* Trend Pill Badge */}
               <span
-                className={`inline-flex items-center gap-0.5 rounded-lg ${card.badgeBg} px-2 py-1 text-[11px] font-black`}
+                className={`grid size-11 place-items-center rounded-xl backdrop-blur-xs ${card.iconBg}`}
               >
-                {card.badgePositive ? "↑" : "↓"} {card.badge}
+                <Icon name={card.icon} className="size-5" />
+              </span>
+            </div>
+
+            <div className="relative z-10 mt-4 flex items-center justify-between border-t border-white/15 pt-3 text-[11px] font-semibold">
+              <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-bold ${card.badgeBg}`}>
+                {card.badge}
+              </span>
+              <span className="flex items-center gap-1 text-white/80 group-hover:text-white transition">
+                <span>View Details</span>
+                <Icon name="arrow" className="size-3 group-hover:translate-x-0.5 transition" />
               </span>
             </div>
           </Link>
         ))}
       </div>
 
-      {/* ROW 2: 4 White Minimal Cards */}
+      {/* ROW 2: 4 White Modern Metric Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {bottomCards.map((card) => (
-          <div
+          <Link
             key={card.title}
-            className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:border-slate-300 hover:shadow-sm"
+            to={card.link}
+            className="group flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition-all duration-200 hover:-translate-y-1 hover:border-slate-300 hover:shadow-sm cursor-pointer"
           >
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center justify-between">
               <div>
-                <strong className="block text-xl font-black tracking-tight text-[#0B1E38]">
+                <span className="text-xs font-bold text-slate-500">{card.title}</span>
+                <h4 className="mt-1 text-xl font-black text-[#0B1E38] tracking-tight">
                   {card.value}
-                </strong>
-                <span className="mt-0.5 block text-xs font-semibold text-slate-400">
-                  {card.title}
-                </span>
+                </h4>
               </div>
-              <span
-                className={`grid size-10 shrink-0 place-items-center rounded-xl ${card.iconColor}`}
-              >
+
+              <span className={`grid size-11 place-items-center rounded-xl ${card.iconColor}`}>
                 <Icon name={card.icon} className="size-5" />
               </span>
             </div>
 
-            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
+            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-[11px]">
               <span
-                className={`font-bold ${
-                  card.trendPositive ? "text-emerald-600" : "text-rose-500"
+                className={`inline-flex items-center gap-1 font-bold ${
+                  card.trendPositive ? "text-emerald-600" : "text-amber-600"
                 }`}
               >
                 {card.trend}
               </span>
-              <Link
-                to={card.link}
-                className="font-extrabold text-slate-700 hover:text-[#FF9F43] transition"
-              >
-                View All
-              </Link>
+              <span className="text-slate-400 group-hover:text-[#FF9F43] transition">
+                <Icon name="arrow" className="size-3 group-hover:translate-x-0.5 transition" />
+              </span>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

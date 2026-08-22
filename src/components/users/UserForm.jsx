@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
+import Icon from "../Icon";
 
 const empty = {
   name: "",
@@ -13,11 +14,15 @@ const empty = {
 
 function UserForm({ isOpen, user, roles = [], onClose, onSave }) {
   const [form, setForm] = useState(empty);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setShowPassword(false);
+      setShowConfirmPassword(false);
       setForm(
         user
           ? {
@@ -179,29 +184,49 @@ function UserForm({ isOpen, user, roles = [], onClose, onSave }) {
                 <label className="block font-bold text-slate-700 mb-1">
                   Password <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                  name="password"
-                  type="password"
-                  placeholder="Min. 4 characters"
-                  autoComplete="new-password"
-                  value={form.password}
-                  onChange={change}
-                />
+                <div className="relative">
+                  <input
+                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Min. 4 characters"
+                    autoComplete="new-password"
+                    value={form.password}
+                    onChange={change}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <Icon name={showPassword ? "eye-off" : "eye"} className="size-4" />
+                  </button>
+                </div>
                 <FieldError errors={errors.password} />
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Confirm Password</label>
-                <input
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                  name="password_confirmation"
-                  type="password"
-                  placeholder="Repeat password"
-                  autoComplete="new-password"
-                  value={form.password_confirmation}
-                  onChange={change}
-                />
+                <div className="relative">
+                  <input
+                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                    name="password_confirmation"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Repeat password"
+                    autoComplete="new-password"
+                    value={form.password_confirmation}
+                    onChange={change}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
+                    title={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    <Icon name={showConfirmPassword ? "eye-off" : "eye"} className="size-4" />
+                  </button>
+                </div>
                 <FieldError errors={errors.password_confirmation} />
               </div>
             </div>

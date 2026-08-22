@@ -1,34 +1,43 @@
 import { Link } from "react-router-dom";
 import Icon from "../Icon";
 
-export default function DreamsBottomInsights({
-  totalCategories = 698,
-  totalProducts = 7899,
-}) {
-  const topCustomers = [
-    { name: "Carlos Curran", country: "USA", orders: 24, spend: "$8,965", avatar: "CC" },
-    { name: "Stan Gaunter", country: "UAE", orders: 22, spend: "$6,985", avatar: "SG" },
-    { name: "Richard Wilson", country: "Germany", orders: 14, spend: "$5,366", avatar: "RW" },
-    { name: "Mary Bronson", country: "Belgium", orders: 8, spend: "$4,569", avatar: "MB" },
-    { name: "Annie Tremblay", country: "Greenland", orders: 14, spend: "$35,698", avatar: "AT" },
-  ];
+const categoryColors = [
+  { stroke: "text-[#FF9F43]", bg: "bg-[#FF9F43]" },
+  { stroke: "text-[#0E2040]", bg: "bg-[#0E2040]" },
+  { stroke: "text-[#1D6AE5]", bg: "bg-[#1D6AE5]" },
+  { stroke: "text-[#0E9384]", bg: "bg-[#0E9384]" },
+];
 
-  // Heatmap rows (Hours: 12mp to 2am vs Days: Mon-Sun)
+export default function DreamsBottomInsights({
+  topCustomers = [],
+  topCategories = [],
+  totalCategories = 0,
+  totalProducts = 0,
+  heatmapGrid = [],
+}) {
   const heatmapHours = ["12 mp", "12 pm", "02 pm", "12 am", "10 am", "8 am", "6 am", "4 am", "2 am"];
   const heatmapDays = ["Mon", "Tue", "Wed", "Thur", "Fri", "Sat", "Sun"];
 
-  // Heatmap intensity grid: 0 (cream), 1 (light peach), 2 (vibrant orange)
-  const heatmapGrid = [
-    [1, 1, 1, 1, 1, 2, 2],
-    [1, 1, 1, 1, 2, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1],
-    [2, 2, 2, 1, 1, 1, 1],
-    [1, 1, 1, 1, 1, 2, 2],
-    [1, 1, 1, 1, 1, 1, 1],
-    [2, 2, 2, 2, 1, 1, 1],
-    [2, 2, 2, 1, 1, 1, 1],
-  ];
+  const grid =
+    heatmapGrid.length > 0
+      ? heatmapGrid
+      : Array(9)
+          .fill(0)
+          .map(() => Array(7).fill(0));
+
+  // Compute donut offsets
+  let cumulativeOffset = 0;
+  const donutSlices = (topCategories.length > 0 ? topCategories : [{ name: "Inventory", sales: 0, percentage: 100 }]).map((cat, idx) => {
+    const color = categoryColors[idx % categoryColors.length];
+    const slice = {
+      ...cat,
+      color,
+      dasharray: `${cat.percentage || 100}, 100`,
+      dashoffset: `-${cumulativeOffset}`,
+    };
+    cumulativeOffset += cat.percentage || 0;
+    return slice;
+  });
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -44,36 +53,42 @@ export default function DreamsBottomInsights({
                 Top Customers
               </strong>
             </div>
-            <Link to="/users" className="text-xs font-extrabold text-[#FF9F43] hover:underline">
-              View All
+            <Link to="/sales" className="text-xs font-extrabold text-[#FF9F43] hover:underline">
+              View Invoices
             </Link>
           </div>
 
           <div className="mt-3 space-y-3">
-            {topCustomers.map((cust, idx) => (
-              <div
-                key={cust.name + idx}
-                className="flex items-center justify-between gap-2.5 rounded-xl p-1.5 transition hover:bg-slate-50"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-tr from-[#0E2040] to-[#1E3A8A] text-white text-[11px] font-black shadow-xs">
-                    {cust.avatar}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-extrabold text-[#0B1E38]">
-                      {cust.name}
-                    </p>
-                    <p className="text-[10px] font-medium text-slate-400 mt-0.5">
-                      📍 {cust.country} • {cust.orders} Orders
-                    </p>
-                  </div>
-                </div>
-
-                <strong className="text-xs font-extrabold text-[#0B1E38] shrink-0">
-                  {cust.spend}
-                </strong>
+            {topCustomers.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 font-medium">
+                No customer orders recorded yet.
               </div>
-            ))}
+            ) : (
+              topCustomers.slice(0, 5).map((cust, idx) => (
+                <div
+                  key={cust.name + idx}
+                  className="flex items-center justify-between gap-2.5 rounded-xl p-1.5 transition hover:bg-slate-50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-tr from-[#0E2040] to-[#1E3A8A] text-white text-[11px] font-black shadow-xs">
+                      {cust.avatar || "CU"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-extrabold text-[#0B1E38]">
+                        {cust.name}
+                      </p>
+                      <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+                        {cust.orders} Orders placed
+                      </p>
+                    </div>
+                  </div>
+
+                  <strong className="text-xs font-extrabold text-[#0B1E38] shrink-0">
+                    {cust.spend}
+                  </strong>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -90,14 +105,13 @@ export default function DreamsBottomInsights({
                 Top Categories
               </strong>
             </div>
-            <span className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 shadow-2xs">
-              Weekly ⌄
-            </span>
+            <Link to="/categories" className="text-xs font-extrabold text-[#FF9F43] hover:underline">
+              Categories
+            </Link>
           </div>
 
           {/* Donut Chart Graphics + Legend */}
           <div className="mt-4 flex items-center justify-around gap-2">
-            {/* Donut graphic mockup with percentages */}
             <div className="relative size-32 shrink-0">
               <svg className="size-full -rotate-90" viewBox="0 0 36 36">
                 <path
@@ -107,89 +121,67 @@ export default function DreamsBottomInsights({
                   fill="none"
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
-                <path
-                  className="text-[#FF9F43]"
-                  strokeDasharray="50, 100"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path
-                  className="text-[#0E2040]"
-                  strokeDasharray="24, 100"
-                  strokeWidth="4"
-                  strokeDashoffset="-50"
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path
-                  className="text-[#1D6AE5]"
-                  strokeDasharray="16, 100"
-                  strokeWidth="4"
-                  strokeDashoffset="-74"
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
+                {donutSlices.map((slice) => (
+                  <path
+                    key={slice.name}
+                    className={slice.color.stroke}
+                    strokeDasharray={slice.dasharray}
+                    strokeWidth="4"
+                    strokeDashoffset={slice.dashoffset}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                ))}
               </svg>
               <div className="absolute inset-0 grid place-items-center text-center">
-                <span className="text-xs font-black text-[#0B1E38]">50%</span>
+                <span className="text-xs font-black text-[#0B1E38]">
+                  {topCategories.length > 0 ? `${topCategories[0].percentage}%` : "100%"}
+                </span>
               </div>
             </div>
 
             {/* Breakdown legend */}
             <div className="space-y-2 text-xs">
-              <div>
-                <div className="flex items-center gap-1.5 font-bold">
-                  <span className="size-2 rounded-full bg-[#FF9F43]" />
-                  <span className="text-slate-500">Electronics</span>
-                </div>
-                <strong className="text-xs font-black text-[#0B1E38] pl-3.5">
-                  698 <span className="text-[10px] font-normal text-slate-400">Sales</span>
-                </strong>
-              </div>
-
-              <div>
-                <div className="flex items-center gap-1.5 font-bold">
-                  <span className="size-2 rounded-full bg-[#0E2040]" />
-                  <span className="text-slate-500">Sports</span>
-                </div>
-                <strong className="text-xs font-black text-[#0B1E38] pl-3.5">
-                  545 <span className="text-[10px] font-normal text-slate-400">Sales</span>
-                </strong>
-              </div>
-
-              <div>
-                <div className="flex items-center gap-1.5 font-bold">
-                  <span className="size-2 rounded-full bg-[#1D6AE5]" />
-                  <span className="text-slate-500">Lifestyles</span>
-                </div>
-                <strong className="text-xs font-black text-[#0B1E38] pl-3.5">
-                  456 <span className="text-[10px] font-normal text-slate-400">Sales</span>
-                </strong>
-              </div>
+              {topCategories.length === 0 ? (
+                <div className="text-[11px] text-slate-400">All products in store</div>
+              ) : (
+                topCategories.slice(0, 3).map((cat, idx) => (
+                  <div key={cat.name}>
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <span className={`size-2 rounded-full ${categoryColors[idx % categoryColors.length].bg}`} />
+                      <span className="text-slate-500 truncate max-w-[100px]">{cat.name}</span>
+                    </div>
+                    <strong className="text-xs font-black text-[#0B1E38] pl-3.5">
+                      {cat.sales} <span className="text-[10px] font-normal text-slate-400">Sales</span>
+                    </strong>
+                  </div>
+                ))
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Category Statistics Summary Footer */}
-          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/60 p-3 space-y-1.5 text-xs font-bold">
-            <div className="flex justify-between items-center text-slate-600">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-blue-600" /> Total Number Of Categories
-              </span>
-              <strong className="text-sm font-black text-[#0B1E38]">{totalCategories}</strong>
-            </div>
-            <div className="flex justify-between items-center text-slate-600">
-              <span className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-orange-500" /> Total Number Of Products
-              </span>
-              <strong className="text-sm font-black text-[#0B1E38]">{totalProducts.toLocaleString()}</strong>
-            </div>
+        {/* Bottom Counts */}
+        <div className="mt-5 space-y-2 border-t border-slate-100 pt-3 text-xs font-bold text-slate-700">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-blue-600" />
+              <span>Total Number Of Categories</span>
+            </span>
+            <strong className="text-sm font-black text-[#0B1E38]">
+              {totalCategories}
+            </strong>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-[#FF9F43]" />
+              <span>Total Number Of Products</span>
+            </span>
+            <strong className="text-sm font-black text-[#0B1E38]">
+              {totalProducts}
+            </strong>
           </div>
         </div>
       </div>
@@ -199,7 +191,7 @@ export default function DreamsBottomInsights({
         <div>
           <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs font-bold">
+              <span className="grid size-7 place-items-center rounded-lg bg-orange-50 text-[#FF9F43] text-xs font-bold">
                 📦
               </span>
               <strong className="text-sm font-black text-[#0B1E38]">
@@ -207,52 +199,46 @@ export default function DreamsBottomInsights({
               </strong>
             </div>
             <span className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 shadow-2xs">
-              Weekly ⌄
+              Weekly Activity
             </span>
           </div>
 
-          {/* Heatmap Grid Graphics */}
-          <div className="mt-4 overflow-x-auto">
-            <div className="min-w-[240px]">
-              {/* Heatmap Table */}
-              <div className="space-y-1">
-                {heatmapHours.map((hour, rIdx) => (
-                  <div key={hour} className="flex items-center gap-1.5 text-[10px]">
-                    <span className="w-10 text-slate-400 font-bold shrink-0">{hour}</span>
-                    <div className="grid grid-cols-7 gap-1 flex-1">
-                      {heatmapGrid[rIdx].map((val, cIdx) => (
-                        <div
-                          key={cIdx}
-                          className={`h-4 rounded-sm transition hover:scale-110 relative group ${
-                            val === 2
-                              ? "bg-[#FF9F43]"
-                              : val === 1
-                              ? "bg-[#FFE7D1]"
-                              : "bg-[#FFF8F2]"
-                          }`}
-                        >
-                          {/* Tooltip on active cell */}
-                          {rIdx === 1 && cIdx === 2 && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:flex items-center rounded-lg bg-[#0E2040] text-white px-2 py-1 text-[9px] font-extrabold whitespace-nowrap shadow-lg z-20">
-                              297 Orders
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Day Labels */}
-              <div className="flex items-center gap-1.5 mt-2 pl-10 text-[10px] font-bold text-slate-400">
-                {heatmapDays.map((day) => (
-                  <span key={day} className="flex-1 text-center">
-                    {day}
-                  </span>
-                ))}
-              </div>
+          {/* Heatmap Grid */}
+          <div className="mt-4 flex items-center justify-between gap-1 sm:gap-2">
+            {/* Hours Labels */}
+            <div className="flex flex-col justify-between h-48 text-[9px] font-bold text-slate-400 py-0.5 pr-1">
+              {heatmapHours.map((h) => (
+                <span key={h}>{h}</span>
+              ))}
             </div>
+
+            {/* Matrix Columns */}
+            <div className="flex flex-1 flex-col justify-between h-48">
+              {grid.map((row, rIdx) => (
+                <div key={rIdx} className="grid grid-cols-7 gap-1 sm:gap-1.5 flex-1 items-center">
+                  {row.map((intensity, cIdx) => (
+                    <div
+                      key={cIdx}
+                      className={`h-3.5 rounded-xs sm:rounded-sm transition-all hover:scale-110 ${
+                        intensity === 2
+                          ? "bg-[#FF9F43] shadow-2xs"
+                          : intensity === 1
+                          ? "bg-[#FFE4CC]"
+                          : "bg-[#FFF6ED]"
+                      }`}
+                      title={`${heatmapDays[cIdx]} ${heatmapHours[rIdx]}`}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Days Labels Footer */}
+          <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-1.5 pl-9 text-center text-[10px] font-bold text-slate-400">
+            {heatmapDays.map((d) => (
+              <span key={d}>{d}</span>
+            ))}
           </div>
         </div>
       </div>

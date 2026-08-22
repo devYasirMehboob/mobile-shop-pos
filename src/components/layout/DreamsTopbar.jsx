@@ -8,7 +8,7 @@ import NotificationBell from "../notifications/NotificationBell";
 
 export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobileSidebar }) {
   const { user, logout } = useAuth();
-  const { can } = usePermissions();
+  const { can, canAny } = usePermissions();
   const { settings } = useSettings();
   const shop = settings?.shop || {};
   const navigate = useNavigate();
@@ -205,18 +205,19 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
         </div>
 
         {/* 2. "+ Add New" Orange Button */}
-        <div className="relative" ref={addNewRef}>
-          <button
-            type="button"
-            onClick={() => setShowAddNewMenu(!showAddNewMenu)}
-            className="flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95"
-          >
-            <Icon name="plus-circle" className="size-4" />
-            <span className="hidden sm:inline">Add New</span>
-          </button>
+        {canAny(["products.create", "purchases.create", "expenses.manage", "suppliers.manage"]) && (
+          <div className="relative" ref={addNewRef}>
+            <button
+              type="button"
+              onClick={() => setShowAddNewMenu(!showAddNewMenu)}
+              className="flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95"
+            >
+              <Icon name="plus-circle" className="size-4" />
+              <span className="hidden sm:inline">Add New</span>
+            </button>
 
-          {showAddNewMenu && (
-            <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50">
+            {showAddNewMenu && (
+              <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-50">
               <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100">
                 Quick Actions
               </div>
@@ -265,6 +266,7 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
             </div>
           )}
         </div>
+      )}
 
         {/* 3. "POS" Deep Navy Button */}
         <Link
@@ -364,15 +366,13 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
         )}
 
         {/* 8. Settings Gear Icon */}
-        {can("settings.manage") && (
-          <Link
-            to="/settings"
-            className="hidden sm:grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-            title="Settings"
-          >
-            <Icon name="settings" className="size-4" />
-          </Link>
-        )}
+        <Link
+          to="/settings"
+          className="hidden sm:grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+          title="Settings & Profile"
+        >
+          <Icon name="settings" className="size-4" />
+        </Link>
 
         {/* 9. User Profile Avatar & Dropdown */}
         <div className="relative ml-1" ref={userRef}>
@@ -410,23 +410,21 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
               </div>
               <div className="mt-1 space-y-0.5">
                 <Link
-                  to="/dashboard"
+                  to={can("dashboard.view") ? "/dashboard" : "/pos"}
                   onClick={() => setShowUserMenu(false)}
                   className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
-                  <Icon name="dashboard" className="size-4 text-slate-400" />
-                  <span>Dashboard</span>
+                  <Icon name={can("dashboard.view") ? "dashboard" : "pos"} className="size-4 text-slate-400" />
+                  <span>{can("dashboard.view") ? "Dashboard" : "POS Workspace"}</span>
                 </Link>
-                {can("settings.manage") && (
-                  <Link
-                    to="/settings"
-                    onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  >
-                    <Icon name="settings" className="size-4 text-slate-400" />
-                    <span>Settings</span>
-                  </Link>
-                )}
+                <Link
+                  to="/settings"
+                  onClick={() => setShowUserMenu(false)}
+                  className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  <Icon name="settings" className="size-4 text-slate-400" />
+                  <span>Settings & Profile</span>
+                </Link>
                 <div className="my-1 h-px bg-slate-100" />
                 <button
                   type="button"

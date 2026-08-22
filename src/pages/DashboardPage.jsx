@@ -53,7 +53,7 @@ function DashboardPage() {
         <AlertMessage message={error} />
         <button
           type="button"
-          className="rounded-xl bg-[#FF9F43] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#F38C2A] transition"
+          className="rounded-xl bg-[#FF9F43] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#F38C2A] transition cursor-pointer"
           onClick={() => loadDashboard()}
         >
           Try again
@@ -68,9 +68,9 @@ function DashboardPage() {
     <div className="space-y-6 pb-8">
       {/* 1. HERO GREETING & LOW STOCK ALERT BANNER */}
       <DreamsHeroSection
-        todayOrders={summary.today_orders || 200}
+        todayOrders={summary.today_orders ?? 0}
         lowStockProduct={
-          dashboard.low_stock_products?.[0]?.name || "Apple iPhone 15"
+          dashboard.low_stock_products?.[0]?.name || "Products in inventory"
         }
       />
 
@@ -79,9 +79,11 @@ function DashboardPage() {
 
       {/* 3. SALES & PURCHASE DUAL BAR CHART + OVERALL INFO & CUSTOMERS OVERVIEW */}
       <DreamsSalesPurchaseChart
-        suppliersCount={summary.total_suppliers_count || 6987}
-        customersCount={summary.total_customers_count || 4896}
-        ordersCount={summary.total_orders_count || 487}
+        monthlyData={dashboard.monthly_chart || []}
+        customersOverview={dashboard.customers_overview || {}}
+        suppliersCount={summary.total_suppliers_count ?? 0}
+        customersCount={summary.total_customers_count ?? 0}
+        ordersCount={summary.total_orders_count ?? 0}
       />
 
       {/* 4. TOP SELLING PRODUCTS + LOW STOCK PRODUCTS + RECENT SALES */}
@@ -94,12 +96,18 @@ function DashboardPage() {
       {/* 5. SALES STATICS (12-MONTH DUAL CHART) + RECENT TRANSACTIONS TABLE */}
       <DreamsSalesStaticsAndTransactions
         transactions={dashboard.recent_transactions || []}
+        monthlyData={dashboard.monthly_chart || []}
+        totalRevenue={summary.total_sales ?? 0}
+        totalExpense={summary.total_expenses ?? 0}
       />
 
       {/* 6. TOP CUSTOMERS + TOP CATEGORIES DONUT + ORDER STATISTICS HEATMAP */}
       <DreamsBottomInsights
-        totalCategories={summary.total_categories_count || 698}
-        totalProducts={summary.total_products_count || 7899}
+        topCustomers={dashboard.top_customers || []}
+        topCategories={dashboard.top_categories || []}
+        totalCategories={summary.total_categories_count ?? 0}
+        totalProducts={summary.total_products_count ?? 0}
+        heatmapGrid={dashboard.heatmap_grid || []}
       />
 
       {/* FOOTER COPYRIGHT */}

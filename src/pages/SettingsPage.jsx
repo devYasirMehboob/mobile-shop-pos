@@ -7,7 +7,9 @@ import {
   uploadShopLogo,
 } from "../api/settingsApi";
 import useAlert from "../hooks/useAlert";
+import useAuth from "../hooks/useAuth";
 import useConfirmation from "../hooks/useConfirmation";
+import usePermissions from "../hooks/usePermissions";
 import normalizeApiError from "../utils/normalizeApiError";
 import PageErrorState from "../components/feedback/PageErrorState";
 import LoadingState from "../components/LoadingState";
@@ -16,6 +18,7 @@ import LogoUploader from "../components/settings/LogoUploader";
 import SettingsNavigation from "../components/settings/SettingsNavigation";
 import SettingsSaveBar from "../components/settings/SettingsSaveBar";
 import SettingsSectionForm from "../components/settings/SettingsSectionForm";
+import UserProfileSettings from "../components/settings/UserProfileSettings";
 import { settingsSections } from "../components/settings/settingsConfig";
 import useSettings from "../hooks/useSettings";
 
@@ -25,9 +28,18 @@ function clone(value) {
 
 function SettingsPage() {
   const { refreshSettings } = useSettings();
+  const { user } = useAuth();
+  const { can } = usePermissions();
+  const isSuperAdmin = user?.role === "admin" || can("settings.manage");
+
+  const visibleSections = useMemo(() => {
+    if (isSuperAdmin) return settingsSections;
+    return settingsSections.filter((s) => s.allUsers);
+  }, [isSuperAdmin]);
+
   const [settings, setSettings] = useState(null);
   const [original, setOriginal] = useState(null);
-  const [active, setActive] = useState("shop");
+  const [active, setActive] = useState(isSuperAdmin ? "profile" : "profile");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const alert = useAlert();
@@ -42,7 +54,7 @@ function SettingsPage() {
   );
 
   const dirty =
-    settings && original
+    active !== "profile" && settings && original && settings[active] && original[active]
       ? JSON.stringify(settings[active]) !== JSON.stringify(original[active])
       : false;
 
@@ -87,11 +99,12 @@ function SettingsPage() {
       });
       if (!confirmed) return;
     }
-    if (dirty)
+    if (dirty && settings && original && settings[active]) {
       setSettings((current) => ({
         ...current,
         [active]: clone(original[active]),
       }));
+    }
     setErrors({});
     setFormError(null);
     setActive(next);
@@ -102,43 +115,50 @@ function SettingsPage() {
       ...current,
       [active]: { ...current[active], [key]: value },
     }));
-    setErrors((current) => {
-      const next = { ...current };
-      delete next[`${active}.${key}`];
-      return next;
-    });
+    setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
-  function reset() {
+  async function submit(event) {
+    event.preventDefault();
+    if (!dirty || active === "profile") return;
+    setBusy(true);
+    setFormError(null);
+    setErrors({});
+    try {
+      const response = await updateSettings(active, settings[active]);
+      const fresh = await getSettings();
+      setSettings(fresh);
+      setOriginal(clone(fresh));
+      await refreshSettings();
+      alert.success(response.message || "Settings updated successfully.");
+    } catch (error) {
+      const normalized = normalizeApiError(error);
+      if (normalized.status === 422 && normalized.errors) {
+        setErrors(normalized.errors);
+      } else {
+        setFormError(normalized.message);
+      }
+      alert.error(normalized.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reset() {
+    if (!dirty || active === "profile") return;
+    const confirmed = await confirm({
+      title: "Reset Section?",
+      description: "Discard unsaved edits in this section?",
+      confirmText: "Discard",
+      tone: "neutral",
+    });
+    if (!confirmed) return;
     setSettings((current) => ({
       ...current,
       [active]: clone(original[active]),
     }));
     setErrors({});
-  }
-
-  async function save() {
-    setBusy(true);
-    setErrors({});
     setFormError(null);
-    try {
-      const payload = clone(settings[active]);
-      if (active === "shop") {
-        delete payload.logo_url;
-      }
-      const response = await updateSettings({ [active]: payload });
-      setSettings(response.data);
-      setOriginal(clone(response.data));
-      await refreshSettings();
-      alert.success(response.message || "Settings updated successfully.");
-    } catch (error) {
-      const normalized = normalizeApiError(error);
-      setErrors(normalized.fieldErrors);
-      setFormError(normalized.message);
-      alert.error(normalized.message);
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function upload(file) {
@@ -149,7 +169,7 @@ function SettingsPage() {
       setSettings(fresh);
       setOriginal(clone(fresh));
       await refreshSettings();
-      alert.success(response.message || "Shop logo updated successfully.");
+      alert.success(response.message || "Logo uploaded successfully.");
     } catch (error) {
       const normalized = normalizeApiError(error);
       alert.error(normalized.message);
@@ -160,13 +180,12 @@ function SettingsPage() {
 
   async function remove() {
     const confirmed = await confirm({
-      title: "Remove Logo",
-      description: "Are you sure you want to remove the current shop logo?",
-      confirmText: "Remove",
+      title: "Remove shop logo?",
+      description: "Receipts will fall back to using your shop name.",
+      confirmText: "Remove Logo",
       tone: "danger",
     });
     if (!confirmed) return;
-
     setBusy(true);
     try {
       const response = await removeShopLogo();
@@ -186,7 +205,7 @@ function SettingsPage() {
   if (loading)
     return (
       <div className="py-16">
-        <LoadingState label="Loading system settings..." />
+        <LoadingState label="Loading settings..." />
       </div>
     );
   if (pageError) return <PageErrorState error={pageError} onRetry={load} />;
@@ -204,11 +223,11 @@ function SettingsPage() {
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-[#0B1E38] tracking-tight">
-            Settings
+            Settings & Profile
           </h1>
           <nav className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
-            <Link to="/dashboard" className="hover:text-slate-700 transition">
-              Dashboard
+            <Link to={can("dashboard.view") ? "/dashboard" : "/pos"} className="hover:text-slate-700 transition">
+              {can("dashboard.view") ? "Dashboard" : "POS Workspace"}
             </Link>
             <span>›</span>
             <span className="text-slate-600 font-bold">Settings</span>
@@ -237,39 +256,45 @@ function SettingsPage() {
         </div>
       )}
 
-      {/* 2. 2-COLUMN SETTINGS LAYOUT (FORM ON LEFT / NAVIGATION ON RIGHT) */}
+      {/* 2. 2-COLUMN SETTINGS LAYOUT */}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-        {/* Main Settings Form Section */}
+        {/* Main Section */}
         <main className="min-w-0">
-          {active === "shop" && (
-            <LogoUploader
-              shop={settings.shop}
-              isBusy={busy}
-              onUpload={upload}
-              onRemove={remove}
-            />
+          {active === "profile" ? (
+            <UserProfileSettings />
+          ) : (
+            <>
+              {active === "shop" && (
+                <LogoUploader
+                  shop={settings.shop}
+                  isBusy={busy}
+                  onUpload={upload}
+                  onRemove={remove}
+                />
+              )}
+
+              <SettingsSectionForm
+                section={section}
+                values={settings[active]}
+                errors={errors}
+                onChange={change}
+                disabled={busy}
+              />
+
+              <SettingsSaveBar
+                isDirty={dirty}
+                isBusy={busy}
+                onSave={submit}
+                onReset={reset}
+              />
+            </>
           )}
-
-          <SettingsSectionForm
-            section={section}
-            values={settings[active]}
-            errors={errors}
-            onChange={change}
-            disabled={busy}
-          />
-
-          <SettingsSaveBar
-            dirty={dirty}
-            busy={busy}
-            onReset={reset}
-            onSave={save}
-          />
         </main>
 
-        {/* Right Navigation Cards */}
-        <aside className="sticky top-20">
+        {/* Navigation Column */}
+        <aside className="w-full lg:sticky lg:top-24">
           <SettingsNavigation
-            sections={settingsSections}
+            sections={visibleSections}
             active={active}
             onSelect={select}
             dirty={dirty ? active : null}

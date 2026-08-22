@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
+import Icon from "../Icon";
 
 function ResetPasswordDialog({ user, onClose, onSave }) {
   const [form, setForm] = useState({ password: "", password_confirmation: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setForm({ password: "", password_confirmation: "" });
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setErrors({});
   }, [user]);
 
@@ -55,19 +60,30 @@ function ResetPasswordDialog({ user, onClose, onSave }) {
             </p>
           )}
 
+          {/* New Password */}
           <div>
             <label className="block font-bold text-slate-700 mb-1">New Password</label>
-            <input
-              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-              type="password"
-              placeholder="Min. 4 characters"
-              autoComplete="new-password"
-              value={form.password}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, password: e.target.value }));
-                setErrors((prev) => ({ ...prev, password: undefined }));
-              }}
-            />
+            <div className="relative">
+              <input
+                className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                type={showPassword ? "text" : "password"}
+                placeholder="Min. 4 characters"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, password: e.target.value }));
+                  setErrors((prev) => ({ ...prev, password: undefined }));
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                <Icon name={showPassword ? "eye-off" : "eye"} className="size-4" />
+              </button>
+            </div>
             {errors.password && (
               <span className="mt-1 block text-[10px] font-bold text-rose-600">
                 {errors.password[0]}
@@ -75,19 +91,39 @@ function ResetPasswordDialog({ user, onClose, onSave }) {
             )}
           </div>
 
+          {/* Confirm New Password */}
           <div>
             <label className="block font-bold text-slate-700 mb-1">Confirm New Password</label>
-            <input
-              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-              type="password"
-              placeholder="Repeat password"
-              autoComplete="new-password"
-              value={form.password_confirmation}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, password_confirmation: e.target.value }));
-                setErrors((prev) => ({ ...prev, password_confirmation: undefined }));
-              }}
-            />
+            <div className="relative">
+              <input
+                className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Repeat password"
+                autoComplete="new-password"
+                value={form.password_confirmation}
+                onChange={(e) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    password_confirmation: e.target.value,
+                  }));
+                  setErrors((prev) => ({
+                    ...prev,
+                    password_confirmation: undefined,
+                  }));
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
+                title={showConfirmPassword ? "Hide password" : "Show password"}
+              >
+                <Icon
+                  name={showConfirmPassword ? "eye-off" : "eye"}
+                  className="size-4"
+                />
+              </button>
+            </div>
             {errors.password_confirmation && (
               <span className="mt-1 block text-[10px] font-bold text-rose-600">
                 {errors.password_confirmation[0]}

@@ -132,20 +132,20 @@ function UsersPage() {
   async function changeStatus(user) {
     const isActivating = user.status !== "active";
     const confirmed = await confirmDialog({
-      title: isActivating ? "Activate Staff Account?" : "Deactivate Staff Account?",
+      title: isActivating ? "Activate User?" : "Deactivate User?",
       description: isActivating
-        ? `${user.name} will be able to log in and access POS with assigned permissions.`
+        ? `${user.name} will be able to log in with their assigned password.`
         : `${user.name} will be signed out immediately and blocked from logging in.`,
-      confirmText: isActivating ? "Activate User" : "Deactivate User",
-      tone: isActivating ? "neutral" : "danger",
+      confirmText: isActivating ? "Activate" : "Deactivate",
+      tone: isActivating ? "success" : "danger",
     });
 
     if (!confirmed) return;
 
     try {
-      const status = isActivating ? "active" : "inactive";
-      const response = await updateUserStatus(user.id, status);
-      alert.success(response.message || "User status updated.");
+      const nextStatus = isActivating ? "active" : "inactive";
+      const response = await updateUserStatus(user.id, nextStatus);
+      alert.success(response.message || `User marked as ${nextStatus}.`);
       await load(false);
     } catch (error) {
       alert.error(normalizeApiError(error).message);

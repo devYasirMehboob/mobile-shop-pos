@@ -1,5 +1,12 @@
 export const settingsSections = [
   {
+    key: "profile",
+    label: "My Profile & Security",
+    description: "Update personal details & change password",
+    isCustom: true,
+    allUsers: true,
+  },
+  {
     key: "shop",
     label: "Shop & branding",
     description: "Identity and receipt contact details",

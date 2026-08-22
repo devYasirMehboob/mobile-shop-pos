@@ -1,36 +1,76 @@
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
 
-const empty = { name: "", email: "", role: "cashier", status: "active", password: "", password_confirmation: "" };
+const empty = {
+  name: "",
+  email: "",
+  phone: "",
+  role: "cashier",
+  status: "active",
+  password: "",
+  password_confirmation: "",
+};
 
-function UserForm({ isOpen, user, roles, onClose, onSave }) {
+function UserForm({ isOpen, user, roles = [], onClose, onSave }) {
   const [form, setForm] = useState(empty);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      setForm(user ? { ...empty, name: user.name, email: user.email || "", role: user.role, status: user.status } : empty);
+      setForm(
+        user
+          ? {
+              ...empty,
+              name: user.name || "",
+              email: user.email || "",
+              phone: user.phone || "",
+              role: user.role || "cashier",
+              status: user.status || "active",
+            }
+          : empty
+      );
       setErrors({});
     }
   }, [isOpen, user]);
 
   function change(event) {
-    setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
-    setErrors((current) => ({ ...current, [event.target.name]: undefined }));
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: undefined }));
   }
 
   async function submit(event) {
     event.preventDefault();
+    if (!form.name.trim()) {
+      setErrors({ name: ["User display name is required."] });
+      return;
+    }
+
+    if (!user && (!form.password || form.password.length < 4)) {
+      setErrors({ password: ["Password must be at least 4 characters."] });
+      return;
+    }
+
     setSaving(true);
     setErrors({});
     try {
       const payload = user
-        ? { name: form.name, email: form.email, role: form.role, status: form.status }
+        ? {
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            role: form.role,
+            status: form.status,
+          }
         : form;
       await onSave(payload);
     } catch (error) {
-      setErrors(error.response?.data?.errors || { form: [error.response?.data?.message || "Unable to save the user."] });
+      setErrors(
+        error.response?.data?.errors || {
+          form: [error.message || "Unable to save user account."],
+        }
+      );
     } finally {
       setSaving(false);
     }
@@ -39,114 +79,139 @@ function UserForm({ isOpen, user, roles, onClose, onSave }) {
   return (
     <Modal
       isOpen={isOpen}
-      title={user ? "Edit user" : "Add user"}
-      description={user ? "Update account identity, email, role, or status." : "Create a shop account with email and password."}
+      title={user ? "Edit User Account" : "Add New User"}
+      description={
+        user
+          ? "Update account credentials, role assignment, or status."
+          : "Create a staff login with assigned roles and credentials."
+      }
       onClose={saving ? () => {} : onClose}
+      size="md"
     >
-      <form onSubmit={submit} noValidate>
-        <div className="space-y-4 px-6 py-5">
-          {errors.form && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errors.form[0]}</p>}
-          
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-bold text-slate-600">Display name</span>
-              <input
-                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
-                name="name"
-                value={form.name}
-                onChange={change}
-                autoFocus
-              />
-              <FieldError errors={errors.name} />
-            </label>
+      <form onSubmit={submit} noValidate className="text-xs">
+        <div className="space-y-4 p-5">
+          {errors.form && (
+            <p className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-bold text-rose-700">
+              {errors.form[0]}
+            </p>
+          )}
 
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-bold text-slate-600">Email address</span>
+          {/* Full Name */}
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Full Name <span className="text-rose-500">*</span>
+            </label>
+            <input
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+              name="name"
+              placeholder="e.g. Yasir Mehboob"
+              value={form.name}
+              onChange={change}
+              autoFocus
+            />
+            <FieldError errors={errors.name} />
+          </div>
+
+          {/* Email & Phone */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Email Address</label>
               <input
-                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
                 name="email"
                 type="email"
-                placeholder="user@mobileshop.com"
+                placeholder="user@mobileshop.pk"
                 value={form.email}
                 onChange={change}
               />
               <FieldError errors={errors.email} />
-            </label>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Phone Number</label>
+              <input
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-mono font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                name="phone"
+                placeholder="0300-1234567"
+                value={form.phone}
+                onChange={change}
+              />
+              <FieldError errors={errors.phone} />
+            </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label>
-              <span className="mb-1.5 block text-xs font-bold text-slate-600">Role</span>
+          {/* Role & Status */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Assigned Role</label>
               <select
-                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
                 name="role"
                 value={form.role}
                 onChange={change}
               >
-                {roles
-                  .filter((role) => role.status === "active")
-                  .map((role) => (
-                    <option key={role.id} value={role.slug}>
-                      {role.name}
-                    </option>
-                  ))}
+                <option value="cashier">Cashier (POS & Receipts)</option>
+                <option value="manager">Manager (Stock & Sales)</option>
+                <option value="admin">Administrator (All Access)</option>
               </select>
               <FieldError errors={errors.role} />
-            </label>
+            </div>
 
-            <label>
-              <span className="mb-1.5 block text-xs font-bold text-slate-600">Status</span>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Account Status</label>
               <select
-                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
                 name="status"
                 value={form.status}
                 onChange={change}
               >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">Active (Can Login)</option>
+                <option value="inactive">Inactive (Suspended)</option>
               </select>
               <FieldError errors={errors.status} />
-            </label>
+            </div>
           </div>
 
+          {/* Password for New Users */}
           {!user && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label>
-                <span className="mb-1.5 block text-xs font-bold text-slate-600">Password</span>
+            <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-slate-100">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Password <span className="text-rose-500">*</span>
+                </label>
                 <input
-                  className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
                   name="password"
                   type="password"
+                  placeholder="Min. 4 characters"
                   autoComplete="new-password"
                   value={form.password}
                   onChange={change}
                 />
                 <FieldError errors={errors.password} />
-              </label>
+              </div>
 
-              <label>
-                <span className="mb-1.5 block text-xs font-bold text-slate-600">Confirm password</span>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Confirm Password</label>
                 <input
-                  className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
                   name="password_confirmation"
                   type="password"
+                  placeholder="Repeat password"
                   autoComplete="new-password"
                   value={form.password_confirmation}
                   onChange={change}
                 />
                 <FieldError errors={errors.password_confirmation} />
-              </label>
-              <p className="sm:col-span-2 text-xs leading-5 text-slate-400">
-                Use at least 6 characters for secure staff login.
-              </p>
+              </div>
             </div>
           )}
         </div>
 
-        <footer className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+        <footer className="flex justify-end gap-2 border-t border-slate-100 p-4">
           <button
             type="button"
-            className="min-h-10 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
             onClick={onClose}
             disabled={saving}
           >
@@ -154,10 +219,10 @@ function UserForm({ isOpen, user, roles, onClose, onSave }) {
           </button>
           <button
             type="submit"
-            className="min-h-10 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-xl bg-[#FF9F43] px-5 py-2.5 text-xs font-black text-white hover:bg-[#F38C2A] shadow-2xs transition cursor-pointer disabled:opacity-50"
             disabled={saving}
           >
-            {saving ? "Saving..." : user ? "Save changes" : "Create user"}
+            {saving ? "Saving..." : user ? "Save Changes" : "Create User"}
           </button>
         </footer>
       </form>
@@ -166,7 +231,7 @@ function UserForm({ isOpen, user, roles, onClose, onSave }) {
 }
 
 function FieldError({ errors }) {
-  return errors ? <span className="mt-1 block text-xs text-red-600">{errors[0]}</span> : null;
+  return errors ? <span className="mt-1 block text-[10px] font-bold text-rose-600">{errors[0]}</span> : null;
 }
 
 export default UserForm;

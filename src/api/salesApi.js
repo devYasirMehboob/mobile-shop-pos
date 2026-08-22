@@ -257,14 +257,16 @@ export async function getSale(id) {
       .from("sales")
       .select("*, access_credentials:cashier_id (name)")
       .eq("id", Number(id))
-      .single();
+      .maybeSingle();
+
     if (saleErr) throw new Error(saleErr.message);
+    if (!sale) throw new Error(`Sale #${id} not found.`);
 
     const { data: items, error: itemsErr } = await supabase
       .from("sale_items")
       .select("*")
       .eq("sale_id", Number(id));
-    if (itemsErr) throw new Error(itemsErr.message);
+    if (itemsErr) console.warn("Sale items fetch notice:", itemsErr.message);
 
     const { data: payments } = await supabase
       .from("payments")
@@ -275,7 +277,7 @@ export async function getSale(id) {
       .from("refunds")
       .select("*")
       .eq("sale_id", Number(id))
-      .single();
+      .maybeSingle();
 
     return {
       ...sale,
@@ -297,18 +299,34 @@ export async function getSaleReceipt(id) {
 
     const settingsMap = {};
     (shopSettings || []).forEach((s) => {
-      settingsMap[s.setting_key] = s.setting_value;
+      if (s.setting_key) {
+        try {
+          settingsMap[s.setting_key] =
+            typeof s.setting_value === "string" && s.setting_value.startsWith("{")
+              ? JSON.parse(s.setting_value)
+              : s.setting_value;
+        } catch {
+          settingsMap[s.setting_key] = s.setting_value;
+        }
+      }
     });
+
+    const shopGroup = settingsMap.shop || {};
+    const receiptGroup = settingsMap.receipt || {};
 
     return {
       sale: saleData,
       shop: {
-        shop_name: settingsMap.shop_name || "Mobile Shop POS",
-        address: settingsMap.address || "Main Boulevard, Lahore",
-        phone: settingsMap.phone || "+92 300 1234567",
-        receipt_footer: settingsMap.receipt_footer || "Thank you for shopping at Mobile Shop POS!",
-        return_policy: settingsMap.return_policy || "7-day check warranty with original invoice.",
+        shop_name: shopGroup.shop_name || settingsMap.shop_name || "Mobile Shop POS",
+        address: shopGroup.address || settingsMap.address || "",
+        phone: shopGroup.phone || settingsMap.phone || "",
+        registration_number: shopGroup.registration_number || settingsMap.registration_number || "",
+        logo: shopGroup.logo || shopGroup.logo_url || settingsMap.logo || settingsMap.logo_url || "",
+        logo_url: shopGroup.logo || shopGroup.logo_url || settingsMap.logo || settingsMap.logo_url || "",
+        receipt_footer: receiptGroup.footer_message || shopGroup.receipt_footer || settingsMap.receipt_footer || "Thank you for shopping with us! Please visit again.",
+        return_policy: receiptGroup.return_policy || shopGroup.return_policy || settingsMap.return_policy || "7-day check warranty with original invoice.",
       },
+      options: receiptGroup,
     };
   }
 

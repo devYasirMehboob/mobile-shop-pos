@@ -64,6 +64,7 @@ function SalesPage() {
   const [details, setDetails] = useState(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receipt, setReceipt] = useState(null);
+  const [isReceiptLoading, setIsReceiptLoading] = useState(false);
   const [action, setAction] = useState(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
@@ -157,12 +158,16 @@ function SalesPage() {
   }
 
   async function handleReprintReceipt(saleId) {
+    setReceiptOpen(true);
+    setIsReceiptLoading(true);
     try {
       const receiptData = await getSaleReceipt(saleId);
       setReceipt(receiptData);
-      setReceiptOpen(true);
     } catch (e) {
       alert.error(normalizeApiError(e).message);
+      setReceiptOpen(false);
+    } finally {
+      setIsReceiptLoading(false);
     }
   }
 
@@ -785,19 +790,15 @@ function SalesPage() {
       />
 
       {/* 80mm RECEIPT PREVIEW MODAL */}
-      <Modal
+      <ReceiptPreview
         isOpen={receiptOpen}
-        title="Thermal Receipt Preview (80mm)"
-        description="Print or download POS transaction receipt."
-        onClose={() => setReceiptOpen(false)}
-        size="md"
-      >
-        {receipt && (
-          <div className="p-4">
-            <ReceiptPreview receipt={receipt} onReprint={() => window.print()} />
-          </div>
-        )}
-      </Modal>
+        receipt={receipt}
+        isLoading={isReceiptLoading}
+        onClose={() => {
+          setReceiptOpen(false);
+          setReceipt(null);
+        }}
+      />
 
       {/* REFUND / CANCEL ACTION DIALOG */}
       <SaleActionDialog

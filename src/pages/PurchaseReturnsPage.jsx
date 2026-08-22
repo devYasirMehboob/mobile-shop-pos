@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { getPurchaseReturns, createPurchaseReturn } from "../api/purchasesApi";
+import { Link } from "react-router-dom";
+import {
+  getPurchaseReturns,
+  createPurchaseReturn,
+  getPurchases,
+} from "../api/purchasesApi";
 import EmptyState from "../components/EmptyState";
 import Icon from "../components/Icon";
 import LoadingState from "../components/LoadingState";
 import Modal from "../components/Modal";
-import { formatCurrency, formatDate } from "../utils/calculateSaleTotals";
+import { formatCurrency, formatDate, formatDateTime } from "../utils/calculateSaleTotals";
 import useAlert from "../hooks/useAlert";
 import normalizeApiError from "../utils/normalizeApiError";
 
 const initialFilters = {
   search: "",
-  supplier_id: "",
+  supplier_id: "all",
   date_from: "",
   date_to: "",
   page: 1,
@@ -19,10 +23,10 @@ const initialFilters = {
 };
 
 function PurchaseReturnsPage() {
-  const navigate = useNavigate();
   const alert = useAlert();
 
   const [filters, setFilters] = useState(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const [data, setData] = useState({
     returns: [],
     pagination: null,
@@ -34,6 +38,7 @@ function PurchaseReturnsPage() {
     },
     suppliers: [],
   });
+  const [purchasesList, setPurchasesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -41,9 +46,10 @@ function PurchaseReturnsPage() {
   // Modal states
   const [viewItem, setViewItem] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newReturn, setNewReturn] = useState({
-    purchase_number: "PUR-2024-001",
-    supplier_name: "",
+    purchase_id: "",
+    supplier_id: "",
     return_date: new Date().toISOString().split("T")[0],
     subtotal: "",
     refund_amount: "",
@@ -55,35 +61,29 @@ function PurchaseReturnsPage() {
     async (f, isRefresh = false) => {
       isRefresh ? setIsRefreshing(true) : setLoading(true);
       try {
-        const res = await getPurchaseReturns(f);
-        let returnsList = res.returns || [];
-
-        // Fallback demo returns if fresh database
-        if (returnsList.length === 0 && !f.search && !f.supplier_id) {
-          returnsList = [
-            { id: 1, return_number: "PR-2024-001", purchase_number: "PUR-2024-001", supplier_name: "Apex Computers", return_date: "2024-12-25", subtotal: 1200, refund_amount: 1200, balance_adjustment: 0, processed_by_name: "Admin User", status: "completed", reason: "Damaged screen panel on 2 units" },
-            { id: 2, return_number: "PR-2024-002", purchase_number: "PUR-2024-002", supplier_name: "Beats Headphones", return_date: "2024-12-12", subtotal: 800, refund_amount: 0, balance_adjustment: 800, processed_by_name: "Cashier 1", status: "completed", reason: "Wrong color variant delivered" },
-            { id: 3, return_number: "PR-2024-003", purchase_number: "PUR-2024-005", supplier_name: "A-Z Store", return_date: "2024-11-10", subtotal: 450, refund_amount: 450, balance_adjustment: 0, processed_by_name: "Admin User", status: "completed", reason: "Faulty charging ports" },
-          ];
-        }
-
-        const summary = {
-          total_returned: returnsList.reduce((acc, r) => acc + Number(r.subtotal || 0), 0),
-          total_refund: returnsList.reduce((acc, r) => acc + Number(r.refund_amount || 0), 0),
-          total_adjustment: returnsList.reduce((acc, r) => acc + Number(r.balance_adjustment || 0), 0),
-          return_count: returnsList.length,
-        };
+        const [res, pRes] = await Promise.all([
+          getPurchaseReturns(f),
+          getPurchases({ limit: 100 }).catch(() => ({ purchases: [] })),
+        ]);
 
         setData({
-          returns: returnsList,
-          summary,
-          suppliers: res.suppliers || [
-            { id: 1, name: "Apex Computers" },
-            { id: 2, name: "Beats Headphones" },
-            { id: 3, name: "A-Z Store" },
-          ],
-          pagination: res.pagination || { page: 1, limit: 10, total: returnsList.length, total_pages: Math.ceil(returnsList.length / 10) || 1 },
+          returns: res.returns || [],
+          summary: res.summary || {
+            total_returned: 0,
+            total_refund: 0,
+            total_adjustment: 0,
+            return_count: 0,
+          },
+          suppliers: res.suppliers || [],
+          pagination: res.pagination || {
+            page: 1,
+            limit: 10,
+            total: (res.returns || []).length,
+            total_pages: Math.ceil((res.returns || []).length / 10) || 1,
+          },
         });
+        setPurchasesList(pRes.purchases || []);
+        setAppliedFilters(f);
       } catch (e) {
         alert.error(normalizeApiError(e).message);
       } finally {
@@ -102,23 +102,23 @@ function PurchaseReturnsPage() {
   function handleSearchChange(e) {
     const val = e.target.value;
     setFilters((f) => ({ ...f, search: val, page: 1 }));
-    loadData({ ...filters, search: val, page: 1 });
+    loadData({ ...appliedFilters, search: val, page: 1 });
   }
 
   function handleSupplierFilter(e) {
     const val = e.target.value;
     setFilters((f) => ({ ...f, supplier_id: val, page: 1 }));
-    loadData({ ...filters, supplier_id: val, page: 1 });
+    loadData({ ...appliedFilters, supplier_id: val, page: 1 });
   }
 
   function changePage(page) {
-    const nextFilters = { ...filters, page };
+    const nextFilters = { ...appliedFilters, page };
     setFilters(nextFilters);
     loadData(nextFilters);
   }
 
   function changeLimit(limit) {
-    const nextFilters = { ...filters, limit: Number(limit), page: 1 };
+    const nextFilters = { ...appliedFilters, limit: Number(limit), page: 1 };
     setFilters(nextFilters);
     loadData(nextFilters);
   }
@@ -138,45 +138,63 @@ function PurchaseReturnsPage() {
     setSelectedIds(next);
   }
 
-  function handleAddReturnSubmit(e) {
+  function handlePurchaseSelect(purchaseId) {
+    const selected = purchasesList.find((p) => String(p.id) === String(purchaseId));
+    if (selected) {
+      setNewReturn((prev) => ({
+        ...prev,
+        purchase_id: selected.id,
+        supplier_id: selected.supplier_id,
+        subtotal: String(selected.grand_total || selected.subtotal || ""),
+        refund_amount: String(selected.paid_amount || 0),
+        balance_adjustment: String(selected.due_amount || 0),
+      }));
+    } else {
+      setNewReturn((prev) => ({ ...prev, purchase_id: purchaseId }));
+    }
+  }
+
+  async function handleAddReturnSubmit(e) {
     e.preventDefault();
-    if (!newReturn.supplier_name || !newReturn.subtotal) {
-      alert.error("Please fill in the required fields.");
+    if (!newReturn.supplier_id || !newReturn.subtotal) {
+      alert.error("Please select a supplier/purchase and enter returned amount.");
       return;
     }
-    const newEntry = {
-      id: Date.now(),
-      return_number: `PR-${new Date().getFullYear()}-${String(data.returns.length + 1).padStart(3, "0")}`,
-      purchase_number: newReturn.purchase_number || "PUR-MANUAL",
-      supplier_name: newReturn.supplier_name,
-      return_date: newReturn.return_date,
-      subtotal: Number(newReturn.subtotal),
-      refund_amount: Number(newReturn.refund_amount || 0),
-      balance_adjustment: Number(newReturn.balance_adjustment || 0),
-      processed_by_name: "Admin User",
-      status: "completed",
-      reason: newReturn.reason || "General Supplier Return",
-    };
 
-    setData((d) => ({
-      ...d,
-      returns: [newEntry, ...d.returns],
-      summary: {
-        ...d.summary,
-        total_returned: d.summary.total_returned + newEntry.subtotal,
-        total_refund: d.summary.total_refund + newEntry.refund_amount,
-        total_adjustment: d.summary.total_adjustment + newEntry.balance_adjustment,
-        return_count: d.summary.return_count + 1,
-      },
-    }));
+    setIsSubmitting(true);
+    try {
+      await createPurchaseReturn({
+        purchase_id: newReturn.purchase_id || 1,
+        supplier_id: newReturn.supplier_id,
+        return_date: newReturn.return_date,
+        subtotal: parseFloat(newReturn.subtotal || 0),
+        refund_amount: parseFloat(newReturn.refund_amount || 0),
+        balance_adjustment: parseFloat(newReturn.balance_adjustment || 0),
+        reason: newReturn.reason || "Supplier return",
+      });
 
-    setAddModalOpen(false);
-    alert.success("Purchase return recorded successfully!");
+      alert.success("Purchase return recorded and stock adjusted successfully.");
+      setAddModalOpen(false);
+      setNewReturn({
+        purchase_id: "",
+        supplier_id: "",
+        return_date: new Date().toISOString().split("T")[0],
+        subtotal: "",
+        refund_amount: "",
+        balance_adjustment: "",
+        reason: "",
+      });
+      loadData(appliedFilters);
+    } catch (e) {
+      alert.error(normalizeApiError(e).message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <div className="space-y-5 pb-8">
-      {/* 1. TOP HEADER & BREADCRUMB + ACTION BUTTONS */}
+      {/* 1. TOP HEADER */}
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-[#0B1E38] tracking-tight">
@@ -191,141 +209,117 @@ function PurchaseReturnsPage() {
           </nav>
         </div>
 
-        {/* Right Actions: PDF, Excel, Refresh, Collapse, + Add Return */}
+        {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* PDF Export Icon */}
           <button
             type="button"
             onClick={() => window.print()}
             className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition cursor-pointer"
             title="Export PDF"
-            aria-label="Export PDF"
           >
             <span className="text-xs font-black">📄</span>
           </button>
 
-          {/* Excel Export Icon */}
           <button
             type="button"
             onClick={() => alert.success("Purchase Returns CSV exported.")}
             className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
-            title="Export Excel / CSV"
-            aria-label="Export Excel / CSV"
+            title="Export Excel"
           >
             <span className="text-xs font-black">📊</span>
           </button>
 
-          {/* Refresh Button */}
           <button
             type="button"
             disabled={isRefreshing}
-            onClick={() => loadData(filters, true)}
+            onClick={() => loadData(appliedFilters, true)}
             className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
             title="Refresh List"
-            aria-label="Refresh List"
           >
             <Icon
               name="refresh"
-              className={`size-4 ${
-                isRefreshing ? "animate-spin text-[#FF9F43]" : ""
-              }`}
+              className={`size-4 ${isRefreshing ? "animate-spin text-[#FF9F43]" : ""}`}
             />
           </button>
 
-          {/* Collapse Chevron Button */}
-          <button
-            type="button"
-            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition"
-            title="Toggle View"
-            aria-label="Toggle View"
-          >
-            <Icon name="chevron-left" className="size-4 rotate-90" />
-          </button>
-
-          {/* + Add Purchase Return Button */}
           <button
             type="button"
             onClick={() => setAddModalOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95 cursor-pointer"
           >
-            <Icon name="plus-circle" className="size-4" />
-            <span>Add Return</span>
+            <Icon name="plus" className="size-4" />
+            <span>Add Purchase Return</span>
           </button>
         </div>
       </section>
 
-      {/* 2. TOP METRIC CARDS (4 WHITE CARDS) */}
+      {/* 2. TOP 4 DYNAMIC METRIC CARDS */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Total Returned Value */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:shadow-md">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Returned Value</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-rose-50 text-rose-600 text-xs">
+            <span className="text-xs font-bold text-slate-500">Total Returned</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-rose-50 text-rose-600 text-xs font-black">
               ↩️
             </span>
           </div>
-          <p className="mt-2 text-xl font-black text-[#0B1E38] tracking-tight">
-            {formatCurrency(data?.summary?.total_returned || 0)}
+          <p className="mt-2 text-2xl font-black text-rose-600 tracking-tight">
+            {formatCurrency(data.summary.total_returned)}
           </p>
           <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Total Value Dispatched
+            Total Invoiced Returns
           </span>
         </div>
 
-        {/* Card 2: Cash Refunded */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:shadow-md">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Cash Refunded</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-emerald-50 text-emerald-600 text-xs">
-              💵
+            <span className="text-xs font-bold text-slate-500">Cash / Bank Refund</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-emerald-50 text-emerald-600 text-xs font-black">
+              💰
             </span>
           </div>
-          <p className="mt-2 text-xl font-black text-emerald-600 tracking-tight">
-            {formatCurrency(data?.summary?.total_refund || 0)}
+          <p className="mt-2 text-2xl font-black text-emerald-600 tracking-tight">
+            {formatCurrency(data.summary.total_refund)}
           </p>
           <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Received from Suppliers
+            Refunds Recovered
           </span>
         </div>
 
-        {/* Card 3: Balance Adjustment */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:shadow-md">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500">Balance Adjusted</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs">
+            <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs font-black">
               ⚖️
             </span>
           </div>
-          <p className="mt-2 text-xl font-black text-blue-600 tracking-tight">
-            {formatCurrency(data?.summary?.total_adjustment || 0)}
+          <p className="mt-2 text-2xl font-black text-blue-600 tracking-tight">
+            {formatCurrency(data.summary.total_adjustment)}
           </p>
           <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Deducted from Ledger
+            Udhaar / Due Deductions
           </span>
         </div>
 
-        {/* Card 4: Returned Count */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs transition hover:shadow-md">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500">Total Returns</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-orange-50 text-[#FF9F43] text-xs">
-              📦
+            <span className="grid size-7 place-items-center rounded-lg bg-orange-50 text-[#FF9F43] text-xs font-black">
+              🧾
             </span>
           </div>
-          <p className="mt-2 text-xl font-black text-[#0B1E38] tracking-tight">
-            {Number(data?.summary?.return_count || 0)}
+          <p className="mt-2 text-2xl font-black text-[#FF9F43] tracking-tight">
+            {data.summary.return_count}
           </p>
           <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Processed Return Slips
+            Return Vouchers Recorded
           </span>
         </div>
       </section>
 
-      {/* 3. RETURNS TABLE PANEL */}
+      {/* 3. MAIN TABLE CONTAINER */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
         {/* Search & Filter Bar */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-5">
-          {/* Search Box */}
           <div className="relative w-full sm:max-w-xs">
             <Icon
               name="search"
@@ -333,419 +327,365 @@ function PurchaseReturnsPage() {
             />
             <input
               type="text"
-              placeholder="Search Return or Supplier..."
+              placeholder="Search Return #, Reason..."
               value={filters.search}
               onChange={handleSearchChange}
               className="w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
             />
           </div>
 
-          {/* Supplier Dropdown Filter */}
-          <div className="relative w-full sm:w-auto">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <select
               value={filters.supplier_id}
               onChange={handleSupplierFilter}
-              className="w-full sm:w-auto appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
             >
-              <option value="">All Suppliers ⌄</option>
+              <option value="all">All Suppliers ⌄</option>
               {data.suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
             </select>
-            <Icon
-              name="chevron-down"
-              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-slate-400"
-            />
           </div>
         </div>
 
-        {/* 4. TABLE OR LOADING / EMPTY STATE */}
+        {/* Table / Empty State */}
         {loading ? (
-          <div className="py-12">
+          <div className="py-16">
             <LoadingState label="Loading purchase returns..." />
           </div>
         ) : data.returns.length === 0 ? (
           <EmptyState
-            icon="refund"
-            title="No purchase returns found"
-            description="Returns created from purchase bills will be catalogued here."
-            actionLabel="Add Return"
-            onAction={() => setAddModalOpen(true)}
+            icon="returns"
+            title="No purchase returns recorded"
+            description="Record supplier returns when sending defective items back."
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-xs">
-              <thead className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+            <table className="w-full min-w-[960px] text-left text-xs">
+              <thead className="border-b border-slate-200/80 bg-slate-50/70 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr>
                   <th className="w-10 px-4 py-3.5">
                     <input
                       type="checkbox"
                       className="size-4 rounded-md border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer"
-                      checked={
-                        data.returns.length > 0 &&
-                        selectedIds.size === data.returns.length
-                      }
+                      checked={data.returns.length > 0 && selectedIds.size === data.returns.length}
                       onChange={toggleSelectAll}
                     />
                   </th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[140px]">Return Code ⇅</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[160px]">Purchase Bill</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[160px]">Supplier</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[120px]">Date ⇅</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[130px]">Returned Value</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[120px]">Cash Refund</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[120px]">Adjustment</th>
-                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[110px]">Status</th>
-                  <th className="px-4 py-3.5 text-right whitespace-nowrap min-w-[90px]">Action</th>
+                  <th className="px-4 py-3.5">Return #</th>
+                  <th className="px-4 py-3.5">Purchase Order</th>
+                  <th className="px-4 py-3.5">Supplier</th>
+                  <th className="px-4 py-3.5">Date</th>
+                  <th className="px-4 py-3.5 text-right">Returned Amount</th>
+                  <th className="px-4 py-3.5 text-right">Cash Refund</th>
+                  <th className="px-4 py-3.5 text-right">Due Adjusted</th>
+                  <th className="px-4 py-3.5">Reason</th>
+                  <th className="px-4 py-3.5 text-right">Action</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100 font-medium">
-                {data.returns.map((row) => {
-                  const isSelected = selectedIds.has(row.id);
+                {data.returns.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50/80 transition">
+                    <td className="px-4 py-3.5">
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded-md border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleSelectOne(row.id)}
+                      />
+                    </td>
 
-                  return (
-                    <tr
-                      key={row.id}
-                      className={`transition hover:bg-slate-50/80 ${
-                        isSelected ? "bg-orange-50/40" : ""
-                      }`}
-                    >
-                      {/* Checkbox */}
-                      <td className="px-4 py-3.5">
-                        <input
-                          type="checkbox"
-                          className="size-4 rounded-md border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer"
-                          checked={isSelected}
-                          onChange={() => toggleSelectOne(row.id)}
-                        />
-                      </td>
+                    <td className="px-4 py-3.5 font-mono font-bold text-rose-600">
+                      {row.return_number || `PRET-${row.id}`}
+                    </td>
 
-                      {/* Code */}
-                      <td className="px-4 py-3.5 font-black text-[#0B1E38] whitespace-nowrap">
-                        <span className="inline-block whitespace-nowrap rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700 font-mono text-[11px] border border-slate-200/60 font-bold">
-                          {row.return_number}
-                        </span>
-                      </td>
+                    <td className="px-4 py-3.5 font-mono font-semibold text-slate-700">
+                      {row.purchase_number || `PUR-${row.purchase_id}`}
+                    </td>
 
-                      {/* Purchase Number */}
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        <Link
-                          to={`/purchases/${row.purchase_id || ""}`}
-                          className="inline-flex items-center gap-1.5 whitespace-nowrap font-bold text-blue-600 hover:text-blue-800 bg-blue-50/90 px-3 py-1 rounded-lg border border-blue-100/70 transition shadow-2xs"
-                        >
-                          <Icon name="purchases" className="size-3.5 text-blue-500 shrink-0" />
-                          <span>{row.purchase_number || "PUR-BILL"}</span>
-                        </Link>
-                      </td>
+                    <td className="px-4 py-3.5 font-bold text-slate-800">
+                      {row.supplier_name}
+                    </td>
 
-                      {/* Supplier */}
-                      <td className="px-4 py-3.5 font-extrabold text-[#0B1E38] whitespace-nowrap">
-                        {row.supplier_name}
-                      </td>
+                    <td className="px-4 py-3.5 text-slate-500 font-medium">
+                      {formatDate(row.return_date)}
+                    </td>
 
-                      {/* Date */}
-                      <td className="px-4 py-3.5 text-slate-600 font-semibold whitespace-nowrap">
-                        {formatDate(row.return_date)}
-                      </td>
+                    <td className="px-4 py-3.5 text-right font-black text-slate-900">
+                      {formatCurrency(row.subtotal)}
+                    </td>
 
-                      {/* Returned Value */}
-                      <td className="px-4 py-3.5 font-black text-rose-600">
-                        {formatCurrency(row.subtotal)}
-                      </td>
+                    <td className="px-4 py-3.5 text-right font-bold text-emerald-600">
+                      {formatCurrency(row.refund_amount)}
+                    </td>
 
-                      {/* Cash Refund */}
-                      <td className="px-4 py-3.5 font-black text-emerald-600">
-                        {formatCurrency(row.refund_amount)}
-                      </td>
+                    <td className="px-4 py-3.5 text-right font-bold text-blue-600">
+                      {formatCurrency(row.balance_adjustment)}
+                    </td>
 
-                      {/* Adjustment */}
-                      <td className="px-4 py-3.5 font-black text-blue-600">
-                        {formatCurrency(row.balance_adjustment)}
-                      </td>
+                    <td className="px-4 py-3.5 text-slate-600 max-w-[180px] truncate font-medium">
+                      {row.reason}
+                    </td>
 
-                      {/* Status Badge with Glowing Dot */}
-                      <td className="px-4 py-3.5">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700 border border-emerald-200/60 shadow-2xs">
-                          <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Completed
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end">
-                          {/* View Details */}
-                          <button
-                            type="button"
-                            onClick={() => setViewItem(row)}
-                            className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs hover:border-slate-300 hover:bg-slate-50 transition cursor-pointer"
-                            title="View Return Slip"
-                            aria-label="View Return Slip"
-                          >
-                            <Icon name="eye" className="size-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    <td className="px-4 py-3.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setViewItem(row)}
+                        className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 hover:text-slate-700 transition cursor-pointer"
+                        title="View Return Details"
+                      >
+                        <Icon name="eye" className="size-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
 
-        {/* 5. FOOTER PAGINATION */}
-        <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
-          {/* Left: Row Per Page */}
-          <div className="flex items-center gap-2 text-slate-500 font-semibold">
-            <span>Row Per Page</span>
-            <div className="relative">
+        {/* 4. FOOTER PAGINATION */}
+        {!loading && data.returns.length > 0 && (
+          <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
+            <div className="flex items-center gap-2 text-slate-500 font-semibold">
+              <span>Rows per page</span>
               <select
                 value={data.pagination?.limit || 10}
                 onChange={(e) => changeLimit(e.target.value)}
-                className="appearance-none rounded-lg border border-slate-200 bg-white pl-2.5 pr-7 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
               >
                 <option value="10">10</option>
                 <option value="20">20</option>
                 <option value="50">50</option>
               </select>
-              <Icon
-                name="chevron-down"
-                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 size-2.5 text-slate-400"
-              />
+              <span>of {data.pagination?.total || data.returns.length} records</span>
             </div>
-            <span>Entries</span>
-          </div>
 
-          {/* Right: Numbered Controls */}
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={(data.pagination?.page || 1) <= 1}
-              onClick={() => changePage((data.pagination?.page || 1) - 1)}
-              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
-              aria-label="Previous Page"
-            >
-              ‹
-            </button>
-
-            {Array.from(
-              { length: Math.min(5, data.pagination?.total_pages || 1) },
-              (_, i) => i + 1
-            ).map((pageNum) => (
+            <div className="flex items-center gap-1.5">
               <button
-                key={pageNum}
                 type="button"
-                onClick={() => changePage(pageNum)}
-                className={`grid size-8 place-items-center rounded-lg text-xs font-bold transition cursor-pointer ${
-                  (data.pagination?.page || 1) === pageNum
-                    ? "bg-[#FF9F43] text-white shadow-xs"
-                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
+                disabled={(data.pagination?.page || 1) <= 1}
+                onClick={() => changePage((data.pagination?.page || 1) - 1)}
+                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
+                aria-label="Previous Page"
               >
-                {pageNum}
+                ‹
               </button>
-            ))}
 
-            <button
-              type="button"
-              disabled={(data.pagination?.page || 1) >= (data.pagination?.total_pages || 1)}
-              onClick={() => changePage((data.pagination?.page || 1) + 1)}
-              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
-              aria-label="Next Page"
-            >
-              ›
-            </button>
+              <span className="px-2 font-bold text-slate-700">
+                Page {data.pagination?.page || 1} of {data.pagination?.total_pages || 1}
+              </span>
+
+              <button
+                type="button"
+                disabled={(data.pagination?.page || 1) >= (data.pagination?.total_pages || 1)}
+                onClick={() => changePage((data.pagination?.page || 1) + 1)}
+                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
+                aria-label="Next Page"
+              >
+                ›
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
-      {/* VIEW DETAILS MODAL */}
-      {viewItem && (
-        <Modal
-          isOpen={Boolean(viewItem)}
-          onClose={() => setViewItem(null)}
-          title={`Purchase Return: ${viewItem.return_number}`}
-        >
-          <div className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4 border border-slate-200/70">
+      {/* VIEW RETURN DETAILS MODAL */}
+      <Modal
+        isOpen={Boolean(viewItem)}
+        title={`Purchase Return — ${viewItem?.return_number || ""}`}
+        description="Recorded supplier return and financial settlement."
+        onClose={() => setViewItem(null)}
+        size="md"
+      >
+        {viewItem && (
+          <div className="p-5 space-y-4 text-xs">
+            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 border border-slate-200">
               <div>
-                <span className="text-slate-400 block font-semibold text-[11px]">Supplier</span>
-                <strong className="text-sm font-extrabold text-[#0B1E38]">{viewItem.supplier_name}</strong>
+                <dt className="text-slate-400 font-bold uppercase text-[10px]">Supplier</dt>
+                <dd className="mt-1 font-bold text-slate-800">{viewItem.supplier_name}</dd>
               </div>
               <div>
-                <span className="text-slate-400 block font-semibold text-[11px]">Return Date</span>
-                <strong className="text-sm font-extrabold text-[#0B1E38]">{formatDate(viewItem.return_date)}</strong>
+                <dt className="text-slate-400 font-bold uppercase text-[10px]">Original Purchase</dt>
+                <dd className="mt-1 font-mono font-bold text-slate-800">{viewItem.purchase_number}</dd>
               </div>
               <div>
-                <span className="text-slate-400 block font-semibold text-[11px]">Purchase Bill</span>
-                <strong className="text-sm font-extrabold text-blue-600">{viewItem.purchase_number}</strong>
+                <dt className="text-slate-400 font-bold uppercase text-[10px]">Return Date</dt>
+                <dd className="mt-1 font-semibold text-slate-700">{formatDate(viewItem.return_date)}</dd>
               </div>
               <div>
-                <span className="text-slate-400 block font-semibold text-[11px]">Processed By</span>
-                <strong className="text-sm font-extrabold text-[#0B1E38]">{viewItem.processed_by_name}</strong>
+                <dt className="text-slate-400 font-bold uppercase text-[10px]">Return Value</dt>
+                <dd className="mt-1 font-black text-rose-600">{formatCurrency(viewItem.subtotal)}</dd>
               </div>
-            </div>
+              <div>
+                <dt className="text-slate-400 font-bold uppercase text-[10px]">Cash / Bank Refund</dt>
+                <dd className="mt-1 font-black text-emerald-600">{formatCurrency(viewItem.refund_amount)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400 font-bold uppercase text-[10px]">Due Balance Adjusted</dt>
+                <dd className="mt-1 font-black text-blue-600">{formatCurrency(viewItem.balance_adjustment)}</dd>
+              </div>
+            </dl>
 
-            <div className="rounded-2xl border border-slate-200 p-4 space-y-2.5">
-              <div className="flex justify-between font-semibold">
-                <span className="text-slate-500">Total Returned Value:</span>
-                <strong className="text-rose-600 font-black text-sm">{formatCurrency(viewItem.subtotal)}</strong>
-              </div>
-              <div className="flex justify-between font-semibold">
-                <span className="text-slate-500">Cash Received Back:</span>
-                <strong className="text-emerald-600 font-black text-sm">{formatCurrency(viewItem.refund_amount)}</strong>
-              </div>
-              <div className="flex justify-between font-semibold">
-                <span className="text-slate-500">Ledger Balance Deduction:</span>
-                <strong className="text-blue-600 font-black text-sm">{formatCurrency(viewItem.balance_adjustment)}</strong>
-              </div>
-              {viewItem.reason && (
-                <div className="pt-2 border-t border-slate-100">
-                  <span className="text-slate-400 block font-semibold text-[11px]">Return Reason:</span>
-                  <p className="mt-1 text-slate-700 font-medium">{viewItem.reason}</p>
-                </div>
-              )}
+            <div className="rounded-xl border border-slate-200 p-3">
+              <span className="text-slate-400 font-bold uppercase text-[10px]">Reason for Return</span>
+              <p className="mt-1 font-medium text-slate-700">{viewItem.reason}</p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-extrabold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+                className="rounded-xl bg-[#FF9F43] px-4 py-2 text-xs font-black text-white hover:bg-[#F38C2A] transition cursor-pointer"
               >
-                Print Slip
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewItem(null)}
-                className="rounded-xl bg-[#FF9F43] px-5 py-2.5 text-xs font-extrabold text-white shadow-md shadow-orange-500/20 hover:bg-[#F38C2A] transition cursor-pointer"
-              >
-                Close
+                🖨️ Print Voucher
               </button>
             </div>
           </div>
-        </Modal>
-      )}
+        )}
+      </Modal>
 
-      {/* ADD RETURN MODAL */}
-      {addModalOpen && (
-        <Modal
-          isOpen={addModalOpen}
-          onClose={() => setAddModalOpen(false)}
-          title="Create Purchase Return"
-        >
-          <form onSubmit={handleAddReturnSubmit} className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Supplier Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Apex Computers"
-                  value={newReturn.supplier_name}
-                  onChange={(e) => setNewReturn({ ...newReturn, supplier_name: e.target.value })}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 font-semibold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
+      {/* ADD PURCHASE RETURN MODAL */}
+      <Modal
+        isOpen={addModalOpen}
+        title="Record Purchase Return"
+        description="Return defective or incorrect products back to the vendor."
+        onClose={() => setAddModalOpen(false)}
+        size="md"
+      >
+        <form onSubmit={handleAddReturnSubmit} className="p-5 space-y-4 text-xs">
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Select Purchase Order <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={newReturn.purchase_id}
+              onChange={(e) => handlePurchaseSelect(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-700 outline-none cursor-pointer"
+            >
+              <option value="">Choose Purchase Order...</option>
+              {purchasesList.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.purchase_number} — {p.supplier_name} ({formatCurrency(p.grand_total)})
+                </option>
+              ))}
+            </select>
+          </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Purchase Invoice #
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. PUR-2024-001"
-                  value={newReturn.purchase_number}
-                  onChange={(e) => setNewReturn({ ...newReturn, purchase_number: e.target.value })}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 font-semibold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Supplier <span className="text-rose-500">*</span>
+            </label>
+            <select
+              required
+              value={newReturn.supplier_id}
+              onChange={(e) => setNewReturn({ ...newReturn, supplier_id: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 p-2.5 font-semibold text-slate-700 outline-none cursor-pointer"
+            >
+              <option value="">Select Supplier...</option>
+              {data.suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Returned Value (Rs) <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                required
+                placeholder="0.00"
+                value={newReturn.subtotal}
+                onChange={(e) => setNewReturn({ ...newReturn, subtotal: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-slate-800 outline-none focus:border-[#FF9F43]"
+              />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Returned Value ($) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={newReturn.subtotal}
-                  onChange={(e) => setNewReturn({ ...newReturn, subtotal: e.target.value })}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Return Date</label>
+              <input
+                type="date"
+                required
+                value={newReturn.return_date}
+                onChange={(e) => setNewReturn({ ...newReturn, return_date: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-medium text-slate-700 outline-none focus:border-[#FF9F43]"
+              />
+            </div>
+          </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Cash Refund ($)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={newReturn.refund_amount}
-                  onChange={(e) => setNewReturn({ ...newReturn, refund_amount: e.target.value })}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Ledger Adjustment ($)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={newReturn.balance_adjustment}
-                  onChange={(e) => setNewReturn({ ...newReturn, balance_adjustment: e.target.value })}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                />
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                Cash / Bank Refund (Rs)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={newReturn.refund_amount}
+                onChange={(e) => setNewReturn({ ...newReturn, refund_amount: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-emerald-600 outline-none focus:border-[#FF9F43]"
+              />
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Return Reason
+                Due Balance Adjusted (Rs)
               </label>
-              <textarea
-                placeholder="Describe reason for returning stock..."
-                value={newReturn.reason}
-                onChange={(e) => setNewReturn({ ...newReturn, reason: e.target.value })}
-                className="h-16 w-full rounded-xl border border-slate-200 p-3 font-medium text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 resize-none"
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={newReturn.balance_adjustment}
+                onChange={(e) =>
+                  setNewReturn({ ...newReturn, balance_adjustment: e.target.value })
+                }
+                className="w-full rounded-xl border border-slate-200 p-2.5 font-bold text-blue-600 outline-none focus:border-[#FF9F43]"
               />
             </div>
+          </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setAddModalOpen(false)}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-extrabold text-slate-600 hover:bg-slate-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-xl bg-[#FF9F43] px-5 py-2.5 text-xs font-extrabold text-white shadow-md shadow-orange-500/20 hover:bg-[#F38C2A] transition"
-              >
-                Save Return
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">
+              Return Reason / Notes <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={2}
+              required
+              placeholder="e.g. Defective batteries, wrong model delivered..."
+              value={newReturn.reason}
+              onChange={(e) => setNewReturn({ ...newReturn, reason: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 p-2.5 font-medium text-slate-800 outline-none focus:border-[#FF9F43]"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setAddModalOpen(false)}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="rounded-xl bg-[#FF9F43] px-5 py-2 text-xs font-black text-white hover:bg-[#F38C2A] transition disabled:opacity-50 cursor-pointer"
+            >
+              {isSubmitting ? "Processing..." : "Save Return"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

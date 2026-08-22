@@ -38,7 +38,8 @@ function PurchaseDetailsPage() {
     setLoading(true);
     setPageError(null);
     try {
-      setPurchase(await getPurchase(id));
+      const res = await getPurchase(id);
+      setPurchase(res.purchase || res);
     } catch (e) {
       setPageError(normalizeApiError(e));
     } finally {
@@ -57,7 +58,7 @@ function PurchaseDetailsPage() {
       const r = await addPurchasePayment(id, values);
       alert.success(r.message || "Payment recorded.");
       setPayment(false);
-      setPurchase(r.data.purchase);
+      await load();
     } catch (e) {
       alert.error(normalizeApiError(e).message);
     } finally {

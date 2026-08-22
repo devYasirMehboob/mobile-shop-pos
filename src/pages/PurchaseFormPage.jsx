@@ -75,32 +75,30 @@ function PurchaseFormPage() {
         setCategories(c.categories || c || []);
 
         if (purchase) {
-          if (purchase.purchase_status !== "draft") {
-            throw new Error("Only draft purchases can be edited.");
-          }
+          const pData = purchase.purchase || purchase;
           setForm({
-            supplier_id: String(purchase.supplier_id),
-            supplier_invoice_number: purchase.supplier_invoice_number || "",
-            purchase_date: purchase.purchase_date,
-            overall_discount: purchase.discount_amount,
-            tax: purchase.tax_amount,
-            shipping_amount: purchase.shipping_amount,
-            other_charges: purchase.other_charges,
-            amount_paid: "0",
+            supplier_id: String(pData.supplier_id),
+            supplier_invoice_number: pData.supplier_invoice_number || "",
+            purchase_date: pData.purchase_date,
+            overall_discount: pData.discount_amount || "0",
+            tax: pData.tax_amount || "0",
+            shipping_amount: pData.shipping_amount || "0",
+            other_charges: pData.other_charges || "0",
+            amount_paid: String(pData.amount_paid || "0"),
             payment_method: "cash",
             payment_reference: "",
-            notes: purchase.notes || "",
-            request_token: purchase.request_token,
+            notes: pData.notes || "",
+            request_token: pData.request_token || crypto.randomUUID(),
           });
           setItems(
-            purchase.items.map((i) => ({
+            (pData.items || []).map((i) => ({
               product_id: Number(i.product_id),
               name: i.product_name,
               product_code: i.product_code,
               unit_id: i.unit_id || i.default_purchase_unit_id || "",
               quantity: String(Number(i.quantity_entered || i.quantity || 1)),
               unit_cost: i.unit_cost,
-              line_discount: i.line_discount,
+              line_discount: i.line_discount || 0,
               last_purchase_cost: i.last_purchase_cost || null,
               purchase_units: i.purchase_units || [],
             }))

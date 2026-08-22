@@ -54,7 +54,7 @@ function ExpenseCategoriesManager({ isOpen, onClose, onChanged }) {
       setForm(blank);
       setEditing(null);
       await load();
-      onChanged();
+      onChanged?.();
       alert.success("Category saved.");
     } catch (e) {
       setError(normalizeApiError(e).message);
@@ -71,7 +71,7 @@ function ExpenseCategoriesManager({ isOpen, onClose, onChanged }) {
         c.status === "active" ? "inactive" : "active"
       );
       await load();
-      onChanged();
+      onChanged?.();
       alert.success("Status updated.");
     } catch (e) {
       alert.error(normalizeApiError(e).message);

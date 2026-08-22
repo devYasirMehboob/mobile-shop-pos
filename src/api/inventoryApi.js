@@ -6,7 +6,6 @@ export async function getInventory(filters = {}) {
     let query = supabase
       .from("products")
       .select("*, categories:category_id (name)", { count: "exact" })
-      .eq("track_stock", 1)
       .order("name", { ascending: true });
 
     if (filters.status) query = query.eq("status", filters.status);
@@ -15,29 +14,36 @@ export async function getInventory(filters = {}) {
       query = query.or(`name.ilike.%${filters.search}%,product_code.ilike.%${filters.search}%,barcode.ilike.%${filters.search}%`);
     }
 
-    const { data, count, error } = await query;
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
 
     let items = (data || []).map((p) => ({
       ...p,
-      category_name: p.categories?.name || "Uncategorized",
+      category_name: p.categories?.name || "General",
     }));
 
     if (filters.stock_status === "low_stock" || filters.stock_status === "low") {
       items = items.filter((p) => Number(p.quantity) > 0 && Number(p.quantity) <= Number(p.minimum_stock || 5));
     } else if (filters.stock_status === "out_of_stock" || filters.stock_status === "out") {
       items = items.filter((p) => Number(p.quantity) <= 0);
+    } else if (filters.stock_status === "in_stock" || filters.stock_status === "instock") {
+      items = items.filter((p) => Number(p.quantity) > Number(p.minimum_stock || 5));
     }
 
     const total = items.length;
+    const page = Number(filters.page) || 1;
+    const limit = Number(filters.limit) || 10;
+    const paginatedItems = items.slice((page - 1) * limit, page * limit);
+
     return {
-      products: items,
+      products: paginatedItems,
+      all_products: items,
       total,
       pagination: {
-        page: filters.page || 1,
-        limit: filters.limit || 10,
+        page,
+        limit,
         total,
-        total_pages: Math.ceil(total / (filters.limit || 10)) || 1,
+        total_pages: Math.ceil(total / limit) || 1,
       },
     };
   }

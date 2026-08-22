@@ -61,11 +61,12 @@ function InventoryPage() {
   const alert = useAlert();
   const confirmDialog = useConfirmation();
 
-  // Check if active tab is "adjustment"
+  // Check route parameters
   const params = new URLSearchParams(location.search);
   const isAdjustmentTab = params.get("tab") === "adjustment";
+  const isLowStockRoute = params.get("filter") === "low" || params.get("filter") === "low_stock";
 
-  const [activeStockTab, setActiveStockTab] = useState("low"); // "low" | "out"
+  const [activeStockTab, setActiveStockTab] = useState(isLowStockRoute ? "low" : "all"); // "all" | "instock" | "low" | "out"
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [products, setProducts] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
@@ -100,7 +101,11 @@ function InventoryPage() {
     async (nextFilters, isRefresh = false) => {
       isRefresh ? setIsRefreshing(true) : setIsLoading(true);
       try {
-        const stockStatus = activeStockTab === "out" ? "out_of_stock" : "low_stock";
+        let stockStatus = undefined;
+        if (activeStockTab === "out") stockStatus = "out_of_stock";
+        else if (activeStockTab === "low") stockStatus = "low_stock";
+        else if (activeStockTab === "instock") stockStatus = "in_stock";
+
         const queryParams = isAdjustmentTab
           ? { ...nextFilters }
           : { ...nextFilters, stock_status: stockStatus };
@@ -111,8 +116,8 @@ function InventoryPage() {
         setPagination(
           inventoryData.pagination || {
             page: nextFilters.page || 1,
-            total: list.length,
-            total_pages: Math.ceil(list.length / (nextFilters.limit || 10)) || 1,
+            total: inventoryData.total || list.length,
+            total_pages: Math.ceil((inventoryData.total || list.length) / (nextFilters.limit || 10)) || 1,
             limit: nextFilters.limit || 10,
           }
         );
@@ -131,7 +136,9 @@ function InventoryPage() {
   useEffect(() => {
     document.title = isAdjustmentTab
       ? "Stock Adjustment | Dreams POS"
-      : "Low Stocks | Dreams POS";
+      : isLowStockRoute
+      ? "Low Stocks | Dreams POS"
+      : "Manage Stock | Dreams POS";
 
     async function initialize() {
       try {
@@ -785,9 +792,12 @@ function InventoryPage() {
   }
 
   // ==========================================
-  // VIEW 2: LOW STOCKS VIEW (default / /inventory)
+  // VIEW 2: MANAGE STOCK / LOW STOCKS VIEW (/inventory and /inventory?filter=low)
   // ==========================================
   const totalTrackedCount = allProducts.length;
+  const inStockCount = allProducts.filter(
+    (p) => Number(p.quantity || 0) > Number(p.minimum_stock || 5)
+  ).length;
   const lowStockCount = allProducts.filter(
     (p) =>
       Number(p.quantity || 0) > 0 &&
@@ -796,6 +806,16 @@ function InventoryPage() {
   const outOfStockCount = allProducts.filter(
     (p) => Number(p.quantity || 0) <= 0
   ).length;
+  const totalRetailValue = allProducts.reduce(
+    (acc, p) =>
+      acc + Number(p.quantity || 0) * Number(p.selling_price || 0),
+    0
+  );
+  const totalCostValue = allProducts.reduce(
+    (acc, p) =>
+      acc + Number(p.quantity || 0) * Number(p.purchase_cost || 0),
+    0
+  );
   const estRestockCost = allProducts
     .filter((p) => Number(p.quantity || 0) <= Number(p.minimum_stock || 5))
     .reduce(
@@ -812,18 +832,22 @@ function InventoryPage() {
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-[#0B1E38] tracking-tight">
-            Low Stocks &amp; Depleted Inventory
+            {isLowStockRoute
+              ? "Low Stocks & Depleted Inventory"
+              : "Manage Stock & Store Inventory"}
           </h1>
           <nav className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
             <Link to="/dashboard" className="hover:text-slate-700 transition">
               Dashboard
             </Link>
             <span>›</span>
-            <span className="text-slate-600 font-bold">Low Stocks</span>
+            <span className="text-slate-600 font-bold">
+              {isLowStockRoute ? "Low Stocks" : "Manage Stock"}
+            </span>
           </nav>
         </div>
 
-        {/* Right Actions: PDF, Excel, Refresh, Send Restock Alert */}
+        {/* Right Actions: PDF, Excel, Refresh, Action Button */}
         <div className="flex flex-wrap items-center gap-2">
           {/* PDF Export Icon */}
           <button
@@ -839,7 +863,7 @@ function InventoryPage() {
           {/* Excel Export Icon */}
           <button
             type="button"
-            onClick={() => alert.success("Low stocks report exported.")}
+            onClick={() => alert.success("Inventory stock report exported.")}
             className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
             title="Export Excel"
             aria-label="Export Excel"
@@ -864,89 +888,184 @@ function InventoryPage() {
             />
           </button>
 
-          {/* Send Email / Alert Button (Navy #0B1E38) */}
-          <button
-            type="button"
-            onClick={() =>
-              alert.success(
-                `Restock alert generated: ${lowStockCount} low items and ${outOfStockCount} depleted items.`
-              )
-            }
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0B1E38] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm transition-all hover:bg-[#19325C] active:scale-95 cursor-pointer"
+          {/* New Product / Add Stock Shortcut */}
+          <Link
+            to="/products?action=new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95 cursor-pointer"
           >
-            <Icon name="bell" className="size-4 text-[#FF9F43]" />
-            <span>Dispatch Restock Alert</span>
-          </button>
+            <Icon name="plus" className="size-4" />
+            <span>Add Product</span>
+          </Link>
         </div>
       </section>
 
       {/* 2. TOP 4 SUMMARY METRIC CARDS */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Low Stock Alert</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-amber-50 text-amber-600 text-xs font-black">
-              ⚠️
-            </span>
-          </div>
-          <p className="mt-2 text-2xl font-black text-amber-600 tracking-tight">
-            {lowStockCount}
-          </p>
-          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            At or Below Reorder Threshold
-          </span>
-        </div>
+        {isLowStockRoute ? (
+          <>
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Low Stock Alert</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-amber-50 text-amber-600 text-xs font-black">
+                  ⚠️
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-amber-600 tracking-tight">
+                {lowStockCount}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                At or Below Reorder Level
+              </span>
+            </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Out of Stock</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-rose-50 text-rose-600 text-xs font-black">
-              ⛔
-            </span>
-          </div>
-          <p className="mt-2 text-2xl font-black text-rose-600 tracking-tight">
-            {outOfStockCount}
-          </p>
-          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Zero In-Stock Balance
-          </span>
-        </div>
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Out of Stock</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-rose-50 text-rose-600 text-xs font-black">
+                  ⛔
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-rose-600 tracking-tight">
+                {outOfStockCount}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                Zero Stock Balance
+              </span>
+            </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Total Tracked Items</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs font-black">
-              📦
-            </span>
-          </div>
-          <p className="mt-2 text-2xl font-black text-[#0B1E38] tracking-tight">
-            {totalTrackedCount}
-          </p>
-          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Active Store Products
-          </span>
-        </div>
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Total Tracked Items</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs font-black">
+                  📦
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-[#0B1E38] tracking-tight">
+                {totalTrackedCount}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                Active Store Catalog
+              </span>
+            </div>
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Est. Restock Budget</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-orange-50 text-[#FF9F43] text-xs font-black">
-              💰
-            </span>
-          </div>
-          <p className="mt-2 text-2xl font-black text-[#FF9F43] tracking-tight">
-            {formatCurrency(estRestockCost)}
-          </p>
-          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Cost to Replenish to Safe Threshold
-          </span>
-        </div>
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Est. Restock Budget</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-orange-50 text-[#FF9F43] text-xs font-black">
+                  💰
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-[#FF9F43] tracking-tight">
+                {formatCurrency(estRestockCost)}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                Required Replenish Budget
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Total Products</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs font-black">
+                  📦
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-[#0B1E38] tracking-tight">
+                {totalTrackedCount}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                Active Tracked Items
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Retail Stock Value</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-emerald-50 text-emerald-600 text-xs font-black">
+                  💰
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-emerald-600 tracking-tight">
+                {formatCurrency(totalRetailValue)}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                Total Selling Value
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Total Stock Cost</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-indigo-50 text-indigo-600 text-xs font-black">
+                  🏷️
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-indigo-600 tracking-tight">
+                {formatCurrency(totalCostValue)}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                Total Purchase Cost
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Stock Alerts</span>
+                <span className="grid size-7 place-items-center rounded-lg bg-amber-50 text-amber-600 text-xs font-black">
+                  ⚠️
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-black text-amber-600 tracking-tight">
+                {lowStockCount + outOfStockCount}
+              </p>
+              <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+                {lowStockCount} Low · {outOfStockCount} Depleted
+              </span>
+            </div>
+          </>
+        )}
       </section>
 
       {/* 3. TABS & FILTER BAR */}
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Left Tabs: Low Stocks / Out of Stocks */}
-        <div className="flex items-center gap-2">
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!isLowStockRoute && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveStockTab("all");
+                  loadData({ ...appliedFilters, page: 1 });
+                }}
+                className={`rounded-xl px-4 py-2 text-xs font-extrabold transition cursor-pointer ${
+                  activeStockTab === "all"
+                    ? "bg-[#FF9F43] text-white shadow-sm shadow-orange-500/20"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                All Products ({totalTrackedCount})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveStockTab("instock");
+                  loadData({ ...appliedFilters, page: 1 });
+                }}
+                className={`rounded-xl px-4 py-2 text-xs font-extrabold transition cursor-pointer ${
+                  activeStockTab === "instock"
+                    ? "bg-[#FF9F43] text-white shadow-sm shadow-orange-500/20"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                In Stock ({inStockCount})
+              </button>
+            </>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -994,13 +1113,13 @@ function InventoryPage() {
               />
             </div>
             <span className="text-xs font-bold text-slate-700">
-              Low Stock Alerts {notifyEnabled ? "Enabled" : "Disabled"}
+              Stock Alerts {notifyEnabled ? "Enabled" : "Disabled"}
             </span>
           </label>
         </div>
       </section>
 
-      {/* 4. LOW STOCKS WHITE CONTAINER */}
+      {/* 4. MAIN INVENTORY WHITE CONTAINER */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
         {/* Search & Category Filter Bar */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-5">
@@ -1045,15 +1164,13 @@ function InventoryPage() {
         {/* 5. TABLE OR LOADING / EMPTY STATE */}
         {isLoading ? (
           <div className="py-16">
-            <LoadingState label="Loading stock levels..." />
+            <LoadingState label="Loading inventory stock..." />
           </div>
         ) : products.length === 0 ? (
           <EmptyState
-            icon="low-stocks"
-            title="All stock levels healthy"
-            description={`No ${
-              activeStockTab === "out" ? "out-of-stock" : "low stock"
-            } items found in this filter.`}
+            icon="manage-stock"
+            title="No inventory records found"
+            description="Try adjusting your search or category filters."
           />
         ) : (
           <div className="overflow-x-auto">
@@ -1073,10 +1190,11 @@ function InventoryPage() {
                   <th className="px-4 py-3.5">Code / SKU</th>
                   <th className="px-4 py-3.5">Product Name</th>
                   <th className="px-4 py-3.5">Category</th>
+                  <th className="px-4 py-3.5 text-right">Cost (Rs)</th>
+                  <th className="px-4 py-3.5 text-right">Price (Rs)</th>
                   <th className="px-4 py-3.5 text-center">In-Stock Qty</th>
-                  <th className="px-4 py-3.5 text-center">Alert Threshold</th>
-                  <th className="px-4 py-3.5 text-center">Deficit</th>
-                  <th className="px-4 py-3.5">Stock Status</th>
+                  <th className="px-4 py-3.5 text-right">Stock Value</th>
+                  <th className="px-4 py-3.5">Status</th>
                   <th className="px-4 py-3.5 text-right">Action</th>
                 </tr>
               </thead>
@@ -1086,8 +1204,11 @@ function InventoryPage() {
                   const isSelected = selectedIds.has(item.id);
                   const qty = Number(item.quantity || 0);
                   const minStock = Number(item.minimum_stock || 5);
-                  const deficit = Math.max(0, minStock - qty);
+                  const cost = Number(item.purchase_cost || 0);
+                  const price = Number(item.selling_price || 0);
+                  const stockVal = qty * cost;
                   const isOut = qty <= 0;
+                  const isLow = qty > 0 && qty <= minStock;
 
                   return (
                     <tr
@@ -1143,27 +1264,37 @@ function InventoryPage() {
                         {item.category_name || "General"}
                       </td>
 
-                      {/* Current In-Stock Qty */}
+                      {/* Purchase Cost */}
+                      <td className="px-4 py-3.5 text-right text-slate-600 font-bold">
+                        {formatCurrency(cost)}
+                      </td>
+
+                      {/* Selling Price */}
+                      <td className="px-4 py-3.5 text-right text-[#0B1E38] font-black">
+                        {formatCurrency(price)}
+                      </td>
+
+                      {/* In-Stock Qty */}
                       <td className="px-4 py-3.5 text-center">
                         <strong
                           className={`text-sm font-black ${
-                            isOut ? "text-rose-600" : "text-amber-600"
+                            isOut
+                              ? "text-rose-600"
+                              : isLow
+                              ? "text-amber-600"
+                              : "text-emerald-600"
                           }`}
                         >
                           {qty} Units
                         </strong>
-                      </td>
-
-                      {/* Min Stock Alert Level */}
-                      <td className="px-4 py-3.5 text-center text-slate-500 font-semibold">
-                        {minStock} Units
-                      </td>
-
-                      {/* Deficit / Units Needed */}
-                      <td className="px-4 py-3.5 text-center">
-                        <span className="inline-block rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200/60">
-                          +{deficit} needed
+                        <span className="block text-[10px] text-slate-400 font-medium">
+                          Min: {minStock}
                         </span>
+                      </td>
+
+                      {/* Stock Value */}
+                      <td className="px-4 py-3.5 text-right font-black text-slate-800">
+                        {formatCurrency(stockVal)}
                       </td>
 
                       {/* Status Badge */}
@@ -1173,36 +1304,31 @@ function InventoryPage() {
                             <span className="size-1.5 rounded-full bg-rose-500" />
                             Out of Stock
                           </span>
-                        ) : (
+                        ) : isLow ? (
                           <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200/60">
                             <span className="size-1.5 rounded-full bg-amber-500" />
                             Low Stock
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                            <span className="size-1.5 rounded-full bg-emerald-500" />
+                            In Stock
                           </span>
                         )}
                       </td>
 
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Restock Button */}
+                        <div className="flex items-center justify-end">
+                          {/* Single Clean Restock Button */}
                           <button
                             type="button"
                             onClick={() => openStockModal(item, "add")}
-                            className="inline-flex items-center gap-1 rounded-xl bg-orange-50 border border-orange-200/70 px-2.5 py-1 text-xs font-black text-[#FF9F43] shadow-2xs hover:bg-[#FF9F43] hover:text-white transition-all cursor-pointer active:scale-95"
-                            title="Restock Product"
+                            className="inline-flex items-center gap-1 rounded-xl bg-orange-50 border border-orange-200/70 px-3 py-1 text-xs font-black text-[#FF9F43] shadow-2xs hover:bg-[#FF9F43] hover:text-white transition-all cursor-pointer active:scale-95"
+                            title="Restock or Adjust Product"
                           >
                             <Icon name="plus" className="size-3" />
                             <span>Restock</span>
-                          </button>
-
-                          {/* Reconcile / Adjust */}
-                          <button
-                            type="button"
-                            onClick={() => openStockModal(item, "adjust")}
-                            className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 hover:text-slate-700 transition cursor-pointer"
-                            title="Set Exact Count / Reconcile"
-                          >
-                            <Icon name="edit" className="size-3" />
                           </button>
                         </div>
                       </td>

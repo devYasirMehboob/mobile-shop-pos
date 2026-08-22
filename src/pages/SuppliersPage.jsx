@@ -19,6 +19,7 @@ import useConfirmation from "../hooks/useConfirmation";
 import normalizeApiError from "../utils/normalizeApiError";
 import { formatCurrency } from "../utils/calculateSaleTotals";
 
+// Suppliers Management Page - Dreams POS
 function SuppliersPage() {
   const { can } = usePermissions();
   const alert = useAlert();
@@ -181,9 +182,9 @@ function SuppliersPage() {
     (acc, r) => acc + (parseFloat(r.current_balance || r.opening_balance) || 0),
     0
   );
-  const totalRegions = new Set(
-    rows.map((r) => r.country || r.city).filter(Boolean)
-  ).size;
+  const creditVendorsCount = rows.filter(
+    (r) => (parseFloat(r.current_balance || r.opening_balance) || 0) > 0
+  ).length;
 
   return (
     <div className="space-y-5 pb-8">
@@ -308,19 +309,19 @@ function SuppliersPage() {
           </span>
         </div>
 
-        {/* Regions / Locations */}
+        {/* Credit Vendors */}
         <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs transition hover:shadow-md">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">Coverage Regions</span>
-            <span className="grid size-7 place-items-center rounded-lg bg-indigo-50 text-indigo-600 text-xs font-black">
-              🌍
+            <span className="text-xs font-bold text-slate-500">Credit Vendors</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-purple-50 text-purple-600 text-xs font-black">
+              📊
             </span>
           </div>
-          <p className="mt-2 text-2xl font-black text-indigo-600 tracking-tight">
-            {totalRegions || 1}
+          <p className="mt-2 text-2xl font-black text-purple-600 tracking-tight">
+            {creditVendorsCount}
           </p>
           <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Cities &amp; Supply Hubs
+            Vendors With Due Balance
           </span>
         </div>
       </section>
@@ -397,8 +398,8 @@ function SuppliersPage() {
                   </th>
                   <th className="px-4 py-3.5">Code ⇅</th>
                   <th className="px-4 py-3.5">Supplier Name</th>
-                  <th className="px-4 py-3.5">Phone / Contact</th>
-                  <th className="px-4 py-3.5">City / Country</th>
+                  <th className="px-4 py-3.5">Phone / WhatsApp</th>
+                  <th className="px-4 py-3.5">Address / Market</th>
                   <th className="px-4 py-3.5 text-right">Payable Balance</th>
                   <th className="px-4 py-3.5">Status</th>
                   <th className="px-4 py-3.5 text-right">Action</th>
@@ -410,7 +411,6 @@ function SuppliersPage() {
                   const isSelected = selectedIds.has(row.id);
                   const code =
                     row.supplier_code || `SU${String(row.id).padStart(3, "0")}`;
-                  const country = row.country || row.city || "—";
                   const balance =
                     parseFloat(row.current_balance ?? row.opening_balance) || 0;
 
@@ -449,21 +449,30 @@ function SuppliersPage() {
                             >
                               {row.name}
                             </strong>
-                            <span className="block text-[10px] text-slate-400 font-medium">
-                              {row.email || "No email"}
-                            </span>
+                            {row.contact_person && (
+                              <span className="block text-[10px] text-slate-500 font-semibold">
+                                Rep: {row.contact_person}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
 
                       {/* Phone */}
                       <td className="px-4 py-3.5 text-slate-700 font-semibold">
-                        {row.phone || "—"}
+                        <div>
+                          <span>{row.phone || "—"}</span>
+                          {row.email && (
+                            <span className="block text-[10px] text-slate-400 font-normal">
+                              {row.email}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
-                      {/* Country */}
-                      <td className="px-4 py-3.5 text-slate-600 font-semibold">
-                        {country}
+                      {/* Address */}
+                      <td className="px-4 py-3.5 text-slate-600 font-medium max-w-[220px] truncate">
+                        {row.address || "—"}
                       </td>
 
                       {/* Payable Balance */}

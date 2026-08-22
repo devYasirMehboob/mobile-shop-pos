@@ -1,19 +1,14 @@
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
 import LoadingState from "../LoadingState";
-import ReadableStock from "../products/ReadableStock";
-import {
-  formatCurrency,
-  formatDateTime,
-} from "../../utils/calculateSaleTotals";
+import { formatCurrency, formatDateTime } from "../../utils/calculateSaleTotals";
 import useSettings from "../../hooks/useSettings";
 import useAlert from "../../hooks/useAlert";
-import apiClient from "../../api/apiClient";
 
 const shopImageUrl = (url) => {
   if (!url) return "";
   if (url.startsWith("http") || url.startsWith("data:")) return url;
-  return new URL(url, apiClient.defaults.baseURL).href;
+  return url;
 };
 
 function ReceiptPreview({
@@ -26,9 +21,16 @@ function ReceiptPreview({
   const { settings } = useSettings();
   const alert = useAlert();
   const options = receipt?.options || settings?.receipt || {};
-  const shop = receipt?.shop || {};
-  const logo = receipt?.shop?.logo || receipt?.shop?.logo_url || settings?.shop?.logo || settings?.shop?.logo_url;
+  const shop = receipt?.shop || settings?.shop || {};
+  const logo = shop.logo || shop.logo_url || settings?.shop?.logo || settings?.shop?.logo_url;
   const [isPrinting, setIsPrinting] = useState(false);
+
+  const sale = receipt?.sale || {};
+  const items = Array.isArray(sale.items) ? sale.items : [];
+  const totalQty = items.reduce(
+    (acc, i) => acc + (parseFloat(i.quantity_entered || i.quantity || i.cartQuantity) || 1),
+    0
+  );
 
   const handlePrint = async () => {
     const printingMethod = settings?.printer?.printing_method || "browser";
@@ -39,29 +41,35 @@ function ReceiptPreview({
         alert.error("Receipt printer name is not configured in settings. Please configure it in Settings > Printer.");
         return;
       }
-      
+
       try {
         setIsPrinting(true);
         const html = document.getElementById("printable-receipt").outerHTML;
-      const fullHtml = `<html><head><style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: "Jameel Noori Nastaleeq", "Noto Nastaliq Urdu", "Nafees", "Urdu Typesetting", Tahoma, Arial, sans-serif; background: white; color: black; font-size: 13px; }
-        .w-full { width: 100%; } .mx-auto { margin-left: auto; margin-right: auto; }
-        .text-center { text-align: center; } .text-right { text-align: right; } .text-left { text-align: left; }
-        .font-bold { font-weight: bold; } .font-extrabold { font-weight: 800; } .font-black { font-weight: 900; }
-        .my-3 { margin-top: 0.75rem; margin-bottom: 0.75rem; } .mb-2 { margin-bottom: 0.5rem; } .mt-2 { margin-top: 0.5rem; }
-        .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; } .pb-1 { padding-bottom: 0.25rem; } .pr-2 { padding-right: 0.5rem; }
-        .border-t { border-top-width: 1px; } .border-dashed { border-style: dashed; } .border-solid { border-style: solid; } .border-black { border-color: black; }
-        .border-2 { border-width: 2px; } .uppercase { text-transform: uppercase; } .text-base { font-size: 1rem; }
-        .flex { display: flex; } .justify-between { justify-content: space-between; } .justify-end { justify-content: flex-end; }
-        .block { display: block; } .align-top { vertical-align: top; } .capitalize { text-transform: capitalize; }
-        .space-y-1 > * + * { margin-top: 0.25rem; } .space-y-2 > * + * { margin-top: 0.5rem; }
-        .max-h-14 { max-height: 3.5rem; } .max-w-24 { max-width: 6rem; } .object-contain { object-fit: contain; }
-        .bg-white { background-color: white; } .p-4 { padding: 1rem; } .text-lg { font-size: 1.125rem; } .text-sm { font-size: 0.875rem; }
-        .text-xs { font-size: 0.75rem; } .tracking-widest { letter-spacing: 0.1em; } .mt-1 { margin-top: 0.25rem; } .mt-4 { margin-top: 1rem; } .mt-3 { margin-top: 0.75rem; } .flex-col { flex-direction: column; } .items-center { align-items: center; } .justify-center { justify-content: center; } .h-10 { height: 2.5rem; } .max-w-\\[200px\\] { max-width: 200px; }
-        .barcode-text { font-family: monospace; }
-      </style></head><body>${html}</body></html>`;
-      
+        const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt - ${sale.invoice_number || receipt?.invoice_number || "Sale"}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, monospace, sans-serif; background: #fff; color: #000; font-size: 12px; line-height: 1.35; }
+    .receipt-container { width: 100%; max-width: 76mm; margin: 0 auto; padding: 6px; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .text-left { text-align: left; }
+    .font-bold { font-weight: 700; }
+    .font-black { font-weight: 900; }
+    .uppercase { text-transform: uppercase; }
+    .divider { border-top: 1px dashed #000; margin: 6px 0; }
+    .divider-double { border-top: 2px solid #000; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 2px 0; }
+    .mono { font-family: "Courier New", Courier, monospace; }
+  </style>
+</head>
+<body>${html}</body>
+</html>`;
+
         const { printHtmlViaQZ } = await import("../../utils/qzService");
         await printHtmlViaQZ(printerName, fullHtml);
       } catch (err) {
@@ -81,159 +89,273 @@ function ReceiptPreview({
     }
   }, [isOpen, receipt, autoPrint]);
 
-  const totals = receipt
-    ? [
-        ["کل رقم", receipt.sale.subtotal],
-        ...(options.show_discount !== false
-          ? [["چھوٹ", receipt.sale.discount_amount]]
-          : []),
-        ...(options.show_tax !== false && options.tax_show_on_receipt !== false
-          ? [[options.tax_name || "ٹیکس", receipt.sale.tax_amount]]
-          : []),
-        ["وصول شدہ", receipt.sale.amount_received],
-        ...(options.show_change !== false
-          ? [["بقایا جات", receipt.sale.change_returned]]
-          : []),
-        ["مجموعی رقم", receipt.sale.grand_total],
-      ]
-    : [];
-
   return (
     <Modal
       isOpen={isOpen}
-      title="Receipt preview"
-      description={`Saved ${options.paper_width || "80mm"} receipt data.`}
+      title="Receipt Preview"
+      description={`80mm Thermal Receipt • ${sale.invoice_number || receipt?.invoice_number || ""}`}
       onClose={onClose}
       size="sm"
     >
       {isLoading ? (
-        <LoadingState label="Loading receipt..." />
+        <div className="py-12">
+          <LoadingState label="Preparing receipt preview..." />
+        </div>
       ) : (
         receipt && (
-          <div className="p-5">
+          <div className="p-4 sm:p-5">
+            {/* Printable Receipt Paper Canvas */}
             <article
               id="printable-receipt"
-              dir="rtl"
-              style={{ fontFamily: '"Alvi Nastaleeq", "Jameel Noori Nastaleeq", "Noto Nastaliq Urdu", "Nafees", Tahoma, Arial, sans-serif' }}
-              className="receipt-content mx-auto max-w-[300px] bg-white p-4 text-base leading-tight text-black print:p-0"
+              dir="ltr"
+              className="receipt-content mx-auto w-full max-w-[320px] rounded-xl border border-slate-300/80 bg-white p-5 text-xs text-slate-950 font-sans shadow-sm print:m-0 print:w-full print:max-w-none print:border-none print:p-0 print:shadow-none"
             >
               <style>{`
                 @media print {
                   @page { margin: 0; size: ${options.paper_width === "58mm" ? "58mm auto" : "80mm auto"}; }
-                  body { margin: 0; padding: 0; }
+                  body { margin: 0; padding: 0; background: #fff !important; color: #000 !important; font-family: monospace, sans-serif !important; }
                   .no-print { display: none !important; }
-                  .receipt-content { width: 100% !important; max-width: none !important; }
+                  .receipt-content { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; padding: 4px !important; }
                 }
               `}</style>
 
-              <header className="text-center">
-                {(receipt.is_offline || receipt.offline_watermark || receipt.sale?.is_offline) && (
-                  <div className="mb-2 rounded border-2 border-dashed border-red-500 bg-red-50 p-1.5 text-center text-xs font-black text-red-700">
+              {/* 1. SHOP HEADER & LOGO */}
+              <header className="text-center space-y-1">
+                {(receipt.is_offline || receipt.offline_watermark || sale.is_offline) && (
+                  <div className="mb-2 rounded border border-dashed border-red-500 bg-red-50 p-1 text-center text-[10px] font-black text-red-700 uppercase tracking-widest">
                     *** Offline Sale — Pending Sync ***
                   </div>
                 )}
-                <p className="mb-2 text-xs font-bold">
-                  رسید نمبر: <span className="barcode-text text-sm">{receipt.sale?.invoice_number || receipt.invoice_number}</span>
-                </p>
 
-                {options.show_logo !== false && shop.logo && (
-                  <img
-                    src={shopImageUrl(shop.logo)}
-                    alt="Logo"
-                    className="mx-auto mb-2 h-12 w-auto object-contain grayscale"
-                  />
+                {/* Shop Logo */}
+                {options.show_logo !== false && logo && (
+                  <div className="mx-auto mb-2 flex justify-center">
+                    <img
+                      src={shopImageUrl(logo)}
+                      alt="Logo"
+                      className="max-h-14 max-w-[120px] object-contain"
+                    />
+                  </div>
                 )}
-                <h2 className="text-lg font-black">{shop.shop_name}</h2>
-                {shop.address && <p>{shop.address}</p>}
-                {options.show_phone !== false && shop.phone && <p className="barcode-text">{shop.phone}</p>}
-                {shop.registration_number && <p>{shop.registration_number}</p>}
-                
-                <div className="my-3 border-t border-solid border-black" />
-                
-                <p className="barcode-text mb-2 text-sm font-bold tracking-wider">{formatDateTime(receipt.sale.created_at)}</p>
-                
-                {options.show_customer !== false && (receipt.sale.customer_name || receipt.sale.customer_phone) && (
-                  <p className="mb-0.5">
-                    کسٹمر: {receipt.sale.customer_name || "نامعلوم"} 
-                    {receipt.sale.customer_phone && <span className="barcode-text mr-2">({receipt.sale.customer_phone})</span>}
+
+                {/* Shop Name */}
+                <h2 className="text-base font-black tracking-tight text-black uppercase">
+                  {shop.shop_name || "Mobile Shop POS"}
+                </h2>
+
+                {/* Shop Contact Details */}
+                {shop.address && (
+                  <p className="text-[11px] font-medium text-slate-700 leading-tight">
+                    {shop.address}
                   </p>
                 )}
-
-                {options.show_cashier !== false && (
-                  <p className="mb-0.5">
-                    کیشیئر: {receipt.sale.cashier_name}
+                {options.show_phone !== false && shop.phone && (
+                  <p className="text-[11px] font-semibold text-slate-800 tracking-wide font-mono">
+                    Tel: {shop.phone}
+                  </p>
+                )}
+                {shop.registration_number && (
+                  <p className="text-[10px] font-medium text-slate-500 uppercase font-mono">
+                    Reg / NTN: {shop.registration_number}
                   </p>
                 )}
               </header>
 
-              {receipt.sale.status !== "completed" && (
-                <div className="my-3 border-2 border-solid border-black py-1 text-center text-base font-black uppercase">
-                  {receipt.sale.status}
+              {/* Top Double Line Separator */}
+              <div className="my-2.5 border-t-2 border-slate-900 border-dashed" />
+
+              {/* 2. INVOICE META DATA */}
+              <div className="space-y-1 text-[11px] font-medium text-slate-800">
+                <div className="flex justify-between items-center font-bold">
+                  <span className="text-slate-600">INVOICE:</span>
+                  <span className="font-mono text-black text-xs font-black">
+                    {sale.invoice_number || receipt.invoice_number || `INV-${sale.id}`}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Date:</span>
+                  <span className="font-mono text-slate-900">
+                    {formatDateTime(sale.created_at || new Date().toISOString())}
+                  </span>
+                </div>
+                {options.show_cashier !== false && sale.cashier_name && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Cashier:</span>
+                    <span className="font-semibold text-slate-900">{sale.cashier_name}</span>
+                  </div>
+                )}
+                {options.show_customer !== false && (sale.customer_name || sale.customer_phone) && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Customer:</span>
+                    <span className="font-semibold text-slate-900 truncate max-w-[170px]">
+                      {sale.customer_name || "Walk-in Customer"}
+                      {sale.customer_phone ? ` (${sale.customer_phone})` : ""}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Banner (if not completed) */}
+              {sale.status && sale.status !== "completed" && (
+                <div className="my-2 rounded border border-black bg-slate-100 py-1 text-center text-xs font-black uppercase tracking-wider">
+                  *** {sale.status} ***
                 </div>
               )}
 
-              <div className="my-3 border-t border-solid border-black" />
-              <table className="w-full text-right">
+              {/* Table Separator */}
+              <div className="my-2.5 border-t border-slate-900 border-dashed" />
+
+              {/* 3. ITEMIZED SALE TABLE */}
+              <table className="w-full text-left text-xs">
                 <thead>
-                  <tr>
-                    <th className="pb-1 text-right">آئٹم</th>
-                    <th className="pb-1 text-left">تعداد</th>
-                    <th className="pb-1 text-left">قیمت</th>
+                  <tr className="border-b border-slate-900 border-dashed text-[10px] font-black uppercase text-slate-700 tracking-wider">
+                    <th className="pb-1 text-left">ITEM</th>
+                    <th className="pb-1 text-center w-12">QTY</th>
+                    <th className="pb-1 text-right w-16">PRICE</th>
+                    <th className="pb-1 text-right w-20">TOTAL</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {receipt.sale.items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="py-1 pl-2">
-                        {item.product_name}
-                        <small className="block">
-                          فی کس <span className="barcode-text">{formatCurrency(item.unit_price)}</span>
-                        </small>
-                      </td>
-                      <td className="py-1 text-left align-top barcode-text">
-                        <ReadableStock quantity={item.quantity_entered || item.quantity} unitType={item.unit_name_snapshot || ""} />
-                      </td>
-                      <td className="py-1 text-left align-top barcode-text">
-                        {formatCurrency(item.line_total)}
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-slate-200/60 divide-dashed font-medium">
+                  {items.map((item, idx) => {
+                    const qty = parseFloat(item.quantity_entered || item.quantity || item.cartQuantity) || 1;
+                    const price = parseFloat(item.unit_price || item.selling_price || item.price) || 0;
+                    const lineTotal = parseFloat(item.line_total) || qty * price;
+
+                    return (
+                      <tr key={item.id || idx} className="align-top">
+                        <td className="py-1.5 pr-1">
+                          <p className="font-bold text-slate-950 leading-snug">
+                            {item.product_name || item.name}
+                          </p>
+                          {item.product_code && (
+                            <span className="block text-[9px] font-mono text-slate-400">
+                              #{item.product_code}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1.5 text-center font-mono font-bold text-slate-900">
+                          {qty}
+                        </td>
+                        <td className="py-1.5 text-right font-mono text-slate-700">
+                          {formatCurrency(price)}
+                        </td>
+                        <td className="py-1.5 text-right font-mono font-bold text-slate-950">
+                          {formatCurrency(lineTotal)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
-              <div className="my-3 border-t border-solid border-black" />
-              <dl className="space-y-1">
-                {totals.map(([label, value]) => (
-                  <div
-                    key={label}
-                    className={`flex justify-between ${label === "مجموعی رقم" ? "text-lg font-black" : ""}`}
-                  >
-                    <dt>{label}</dt>
-                    <dd className="barcode-text">{formatCurrency(value)}</dd>
+              {/* Financial Totals Separator */}
+              <div className="my-2.5 border-t border-slate-900 border-dashed" />
+
+              {/* 4. TOTALS & PAYMENT SUMMARY */}
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between items-center text-slate-700">
+                  <span>Subtotal:</span>
+                  <span className="font-mono font-bold">{formatCurrency(sale.subtotal)}</span>
+                </div>
+
+                {options.show_discount !== false && Number(sale.discount_amount) > 0 && (
+                  <div className="flex justify-between items-center text-slate-700">
+                    <span>Discount:</span>
+                    <span className="font-mono text-rose-600 font-bold">
+                      -{formatCurrency(sale.discount_amount)}
+                    </span>
                   </div>
-                ))}
-              </dl>
+                )}
 
-              {options.show_payment_method !== false && (
-                <p className="mt-2 capitalize">
-                  ادائیگی کا طریقہ: {receipt.sale.payment_method === "cash" ? "نقد" : receipt.sale.payment_method.replaceAll("_", " ")}
+                {options.show_tax !== false && Number(sale.tax_amount) > 0 && (
+                  <div className="flex justify-between items-center text-slate-700">
+                    <span>{options.tax_name || "Tax (GST)"}:</span>
+                    <span className="font-mono font-bold">{formatCurrency(sale.tax_amount)}</span>
+                  </div>
+                )}
+
+                {/* Big Grand Total Box */}
+                <div className="my-2 border-y-2 border-slate-950 py-1.5 flex justify-between items-center">
+                  <span className="text-sm font-black text-black uppercase tracking-wide">
+                    TOTAL PAYABLE:
+                  </span>
+                  <span className="text-base font-black font-mono text-black">
+                    {formatCurrency(sale.grand_total)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-slate-800 pt-0.5">
+                  <span className="text-slate-600">Amount Received:</span>
+                  <span className="font-mono font-bold">
+                    {formatCurrency(sale.amount_received ?? sale.grand_total)}
+                  </span>
+                </div>
+
+                {options.show_change !== false && (
+                  <div className="flex justify-between items-center text-slate-800">
+                    <span className="text-slate-600">Change Returned:</span>
+                    <span className="font-mono font-bold text-emerald-700">
+                      {formatCurrency(sale.change_returned || 0)}
+                    </span>
+                  </div>
+                )}
+
+                {options.show_payment_method !== false && (
+                  <div className="flex justify-between items-center text-slate-800">
+                    <span className="text-slate-600">Payment Method:</span>
+                    <span className="font-bold uppercase tracking-wider">
+                      {(sale.payment_method || "cash").replaceAll("_", " ")}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center text-[10px] text-slate-500 pt-1">
+                  <span>Total Quantity Sold:</span>
+                  <span className="font-mono font-bold text-slate-700">
+                    {totalQty} Pcs ({items.length} Products)
+                  </span>
+                </div>
+              </div>
+
+              {/* Bottom Separator */}
+              <div className="my-3 border-t-2 border-slate-900 border-dashed" />
+
+              {/* 5. FOOTER MESSAGES & BARCODE */}
+              <footer className="text-center space-y-1.5 pt-0.5">
+                <p className="text-[11px] font-bold text-slate-900">
+                  {shop.receipt_footer || "Thank you for shopping with us! Please visit again."}
                 </p>
-              )}
 
-              <div className="my-3 border-t border-solid border-black" />
-              
-              <footer className="mt-3 space-y-1 text-center">
-                <p>{shop.footer}</p>
-                <p>{shop.return_policy}</p>
+                {shop.return_policy && (
+                  <p className="text-[10px] font-medium text-slate-500 leading-tight">
+                    * {shop.return_policy}
+                  </p>
+                )}
+
+                {/* Visual Barcode for Invoice */}
+                <div className="pt-2 text-center">
+                  <div className="mx-auto flex justify-center items-center gap-[2px] h-7 w-44">
+                    {Array.from({ length: 32 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-full bg-black ${i % 3 === 0 ? "w-1" : i % 2 === 0 ? "w-[1.5px]" : "w-[0.5px]"}`}
+                      />
+                    ))}
+                  </div>
+                  <span className="block mt-1 font-mono text-[10px] font-bold tracking-widest text-slate-600">
+                    {sale.invoice_number || receipt.invoice_number || `*${sale.id}*`}
+                  </span>
+                </div>
               </footer>
             </article>
 
-            <div className="no-print mt-5 flex justify-end gap-2">
+            {/* Modal Actions */}
+            <div className="no-print mt-5 flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isPrinting}
-                className="rounded-lg border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-extrabold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
               >
                 Close
               </button>
@@ -241,9 +363,9 @@ function ReceiptPreview({
                 type="button"
                 onClick={handlePrint}
                 disabled={isPrinting}
-                className="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#FF9F43] px-5 py-2.5 text-xs font-black text-white shadow-md shadow-orange-500/20 hover:bg-[#F38C2A] transition cursor-pointer disabled:opacity-50"
               >
-                {isPrinting ? "Printing..." : "Print / Reprint"}
+                <span>🖨️ {isPrinting ? "Printing..." : "Print / Reprint (80mm)"}</span>
               </button>
             </div>
           </div>

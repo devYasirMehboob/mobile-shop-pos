@@ -117,7 +117,23 @@ export async function completeSale(payload) {
         id: sale.id,
         invoice_number: sale.invoice_number,
         grand_total: sale.grand_total,
+        subtotal: payload.subtotal,
+        discount_amount: payload.discount_amount,
+        tax_amount: payload.tax_amount,
+        amount_received: payload.amount_received,
         change_returned: sale.change_returned,
+        payment_method: payload.payment_method || "cash",
+        customer_name: payload.customer_name,
+        customer_phone: payload.customer_phone,
+        items: items.map((item) => ({
+          id: item.product_id || item.id,
+          name: item.name || item.product_name,
+          quantity: parseFloat(item.quantity) || 1,
+          unit_price: parseFloat(item.unit_price || item.selling_price || item.price) || 0,
+          line_total: parseFloat(item.line_total) || (parseFloat(item.quantity || 1) * parseFloat(item.unit_price || item.selling_price || 0)),
+        })),
+        total_items: items.length,
+        total_quantity: items.reduce((acc, i) => acc + (parseFloat(i.quantity) || 1), 0),
       },
     };
   }

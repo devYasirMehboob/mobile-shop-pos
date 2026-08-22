@@ -288,21 +288,32 @@ function PosPage() {
       return notify("Cash received must cover the grand total.", "error");
     }
 
+    const saleItems = (cart.items || []).map((i) => {
+      const q = parseFloat(i.cartQuantity ?? i.quantity ?? 1) || 1;
+      const price = parseFloat(i.selling_price ?? i.price ?? 0) || 0;
+      const cost = parseFloat(i.purchase_cost ?? i.cost ?? 0) || 0;
+      return {
+        product_id: Number(i.id),
+        id: Number(i.id),
+        name: i.name || "Product",
+        product_name: i.name || "Product",
+        product_code: i.product_code || i.barcode || `PRD-${i.id}`,
+        quantity: q,
+        cartQuantity: q,
+        unit_price: price,
+        selling_price: price,
+        purchase_cost: cost,
+        line_total: Math.round(q * price * 100) / 100,
+      };
+    });
+
+    const totalQty = saleItems.reduce((acc, item) => acc + (parseFloat(item.quantity) || 1), 0);
+    const totalProductsCount = saleItems.length;
+
     setIsSubmitting(true);
     try {
       const payload = {
-        items: cart.items.map((i) => ({
-          product_id: i.id,
-          id: i.id,
-          name: i.name,
-          product_name: i.name,
-          product_code: i.product_code || i.barcode || `PRD-${i.id}`,
-          quantity: i.cartQuantity,
-          unit_price: Number(i.selling_price || 0),
-          selling_price: Number(i.selling_price || 0),
-          purchase_cost: Number(i.purchase_cost || 0),
-          line_total: i.cartQuantity * Number(i.selling_price || 0),
-        })),
+        items: saleItems,
         subtotal: totals.subtotal,
         discount_type: discountType,
         discount_value: Number(discountValue) || 0,
@@ -319,13 +330,21 @@ function PosPage() {
       };
 
       const response = await completeSale(payload);
-      const returnedSale = response.data?.sale || response.data || {
-        id: response.data?.id,
-        invoice_number: response.data?.invoice_number,
+      const returnedSale = {
+        ...(response.data?.sale || response.data || {}),
+        id: response.data?.sale?.id || response.data?.id,
+        invoice_number: response.data?.sale?.invoice_number || response.data?.invoice_number || `INV-${Date.now()}`,
         grand_total: totals.grandTotal,
+        subtotal: totals.subtotal,
+        discount_amount: totals.discount,
+        tax_amount: totals.tax,
         amount_received: Number(payment.amount_received || totals.grandTotal),
         change_returned: Math.max(0, Number(payment.amount_received || totals.grandTotal) - totals.grandTotal),
         payment_method: payment.payment_method || "cash",
+        customer_name: payment.customer_name || "Walk-in Customer",
+        items: saleItems,
+        total_items: totalProductsCount,
+        total_quantity: totalQty,
       };
       setSavedSale(returnedSale);
 

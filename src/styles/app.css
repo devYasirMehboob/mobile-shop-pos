@@ -52,7 +52,8 @@
   @page receipt { size: 80mm auto; margin: 3mm; }
   @page report { size: A4 landscape; margin: 10mm; }
   body * { visibility: hidden !important; }
-  .receipt-print-root, .receipt-print-root *, .report-print-root, .report-print-root *, .label-print-root, .label-print-root * { visibility: visible !important; }
+  #printable-receipt, #printable-receipt *, .receipt-print-root, .receipt-print-root *, .report-print-root, .report-print-root *, .label-print-root, .label-print-root * { visibility: visible !important; }
+  #printable-receipt { position: absolute; inset: 0 auto auto 0; width: 78mm !important; max-width: 78mm !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; border: none !important; }
   .receipt-print-root { page: receipt; position: absolute; inset: 0 auto auto 0; width: 74mm !important; max-width: 74mm !important; padding: 0 !important; box-shadow: none !important; }
   .report-print-root { page: report; position: absolute; inset: 0; width: 100% !important; padding: 0 !important; background: white !important; }
   .label-print-root { position: absolute; inset: 0; width: 100% !important; padding: 0 !important; background: white !important; }

@@ -331,21 +331,6 @@ function ReceiptPreview({
                     * {shop.return_policy}
                   </p>
                 )}
-
-                {/* Visual Barcode for Invoice */}
-                <div className="pt-2 text-center">
-                  <div className="mx-auto flex justify-center items-center gap-[2px] h-7 w-44">
-                    {Array.from({ length: 32 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`h-full bg-black ${i % 3 === 0 ? "w-1" : i % 2 === 0 ? "w-[1.5px]" : "w-[0.5px]"}`}
-                      />
-                    ))}
-                  </div>
-                  <span className="block mt-1 font-mono text-[10px] font-bold tracking-widest text-slate-600">
-                    {sale.invoice_number || receipt.invoice_number || `*${sale.id}*`}
-                  </span>
-                </div>
               </footer>
             </article>
 

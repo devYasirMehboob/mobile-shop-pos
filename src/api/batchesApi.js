@@ -5,14 +5,14 @@ export async function getBatches(filters = {}) {
   if (isSupabaseConfigured()) {
     let query = supabase
       .from("product_batches")
-      .select("*, products:product_id (id, name, product_code, image, selling_price)")
+      .select("*, products:product_id (id, name, product_code, barcode, image, selling_price)", { count: "exact" })
       .order("created_at", { ascending: false });
 
     if (filters.status) {
       query = query.eq("status", filters.status);
     }
     if (filters.product_id) {
-      query = query.eq("product_id", filters.product_id);
+      query = query.eq("product_id", Number(filters.product_id));
     }
     if (filters.search) {
       query = query.or(
@@ -20,163 +20,199 @@ export async function getBatches(filters = {}) {
       );
     }
 
-    const { data, error } = await query;
+    const { data, count, error } = await query;
     if (error) throw new Error(error.message);
 
-    let formatted = (data || []).map((b) => ({
-      ...b,
-      product_name: b.products?.name || "Product",
-      product_code: b.products?.product_code || "",
-      product_image: b.products?.image || null,
-      selling_price: b.products?.selling_price || 0,
-    }));
+    let formatted = (data || []).map((b) => {
+      const remaining = Number(b.remaining_quantity || 0);
+      const received = Number(b.received_quantity || remaining);
+      const unitCost = Number(b.unit_cost || 0);
+      return {
+        ...b,
+        product_name: b.products?.name || "Product",
+        product_code: b.products?.product_code || "",
+        barcode: b.products?.barcode || "",
+        product_image: b.products?.image || null,
+        selling_price: b.products?.selling_price || 0,
+        received_quantity: received,
+        remaining_quantity: remaining,
+        unit_cost: unitCost,
+        total_value: remaining * unitCost,
+        status: b.status || (remaining > 0 ? "active" : "depleted"),
+        received_date: b.received_at || b.created_at,
+      };
+    });
 
-    // Client-side expiry state filter if needed
-    const now = new Date();
-    const thirtyDaysAhead = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-    if (filters.expiry_state === "expired") {
-      formatted = formatted.filter(
-        (b) => b.expiry_date && new Date(b.expiry_date) < now
-      );
-    } else if (filters.expiry_state === "near_expiry") {
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
       formatted = formatted.filter(
         (b) =>
-          b.expiry_date &&
-          new Date(b.expiry_date) >= now &&
-          new Date(b.expiry_date) <= thirtyDaysAhead
-      );
-    } else if (filters.expiry_state === "valid") {
-      formatted = formatted.filter(
-        (b) => !b.expiry_date || new Date(b.expiry_date) > thirtyDaysAhead
+          b.batch_number?.toLowerCase().includes(q) ||
+          b.product_name?.toLowerCase().includes(q) ||
+          b.product_code?.toLowerCase().includes(q) ||
+          b.barcode?.toLowerCase().includes(q)
       );
     }
 
-    // Fallback sample expired products if none found
-    if (formatted.length === 0 && !filters.search && !filters.status) {
-      formatted = [
-        {
-          id: 1,
-          batch_number: "BATCH-894021",
-          product_name: "Apple iPhone 15 Battery Pack",
-          product_code: "PT001",
-          manufacturing_date: "2024-01-10",
-          expiry_date: "2024-12-15",
-          remaining_quantity: 12,
-          unit_cost: 45.0,
-          status: "active",
-        },
-        {
-          id: 2,
-          batch_number: "BATCH-774190",
-          product_name: "Tempered Glass Screen Clean Wipes",
-          product_code: "PT002",
-          manufacturing_date: "2023-06-01",
-          expiry_date: "2024-06-01",
-          remaining_quantity: 48,
-          unit_cost: 0.5,
-          status: "active",
-        },
-        {
-          id: 3,
-          batch_number: "BATCH-629103",
-          product_name: "Universal Cleaning Spray 200ml",
-          product_code: "PT003",
-          manufacturing_date: "2024-03-15",
-          expiry_date: "2025-03-15",
-          remaining_quantity: 20,
-          unit_cost: 4.2,
-          status: "active",
-        },
-        {
-          id: 4,
-          batch_number: "BATCH-551029",
-          product_name: "Thermal Paste Arctic MX-4 4g",
-          product_code: "PT004",
-          manufacturing_date: "2023-02-20",
-          expiry_date: "2025-02-20",
-          remaining_quantity: 8,
-          unit_cost: 6.5,
-          status: "active",
-        },
-      ];
-    }
-
-    const page = Number(filters.page) || 1;
-    const limit = Number(filters.limit) || 10;
-    const total = formatted.length;
-    const total_pages = Math.ceil(total / limit) || 1;
-
+    const total = count ?? formatted.length;
     return {
-      batches: formatted.slice((page - 1) * limit, page * limit),
+      batches: formatted,
+      total,
       pagination: {
-        page,
-        limit,
+        page: filters.page || 1,
+        limit: filters.limit || 10,
         total,
-        total_pages,
+        total_pages: Math.ceil(total / (filters.limit || 10)) || 1,
       },
     };
   }
 
   const response = await apiClient.get("/batches", { params: filters });
-  return {
-    batches: response.data.data?.batches || [],
-    pagination: response.data.data?.pagination || { page: 1, limit: 10, total: 0, total_pages: 1 },
-  };
+  return response.data.data;
+}
+
+export async function createBatch(values) {
+  if (isSupabaseConfigured()) {
+    const { product_id, batch_number, received_quantity, unit_cost, received_at, notes, user_id } = values;
+    const qty = Math.abs(parseFloat(received_quantity) || 0);
+    const cost = parseFloat(unit_cost) || 0;
+
+    const { data: prod, error: prodErr } = await supabase
+      .from("products")
+      .select("id, name, quantity")
+      .eq("id", Number(product_id))
+      .single();
+
+    if (prodErr) throw new Error("Selected product not found: " + prodErr.message);
+
+    const prevQty = Number(prod?.quantity || 0);
+    const newQty = prevQty + qty;
+
+    // 1. Insert into product_batches
+    const { data: batch, error: batchErr } = await supabase
+      .from("product_batches")
+      .insert([
+        {
+          product_id: Number(product_id),
+          batch_number: batch_number?.trim() || `BATCH-${Date.now().toString().slice(-6)}`,
+          received_quantity: qty,
+          remaining_quantity: qty,
+          reserved_quantity: 0,
+          unit_cost: cost,
+          status: "active",
+          received_at: received_at || new Date().toISOString(),
+          created_by: user_id || 1,
+        },
+      ])
+      .select()
+      .single();
+
+    if (batchErr) throw new Error(batchErr.message);
+
+    // 2. Update product stock
+    await supabase.from("products").update({ quantity: newQty }).eq("id", Number(product_id));
+
+    // 3. Log stock movement
+    await supabase.from("stock_transactions").insert([
+      {
+        product_id: Number(product_id),
+        batch_id: batch.id,
+        user_id: user_id || 1,
+        transaction_type: "batch_inward",
+        quantity: qty,
+        previous_stock: prevQty,
+        new_stock: newQty,
+        reason: notes || `Incoming Batch: ${batch.batch_number}`,
+      },
+    ]);
+
+    return {
+      success: true,
+      message: `Batch "${batch.batch_number}" received successfully. Stock updated to ${newQty} units.`,
+      batch,
+    };
+  }
+
+  const response = await apiClient.post("/batches", values);
+  return response.data;
 }
 
 export async function toggleBatchStatus(id, newStatus) {
   if (isSupabaseConfigured()) {
-    const { data, error } = await supabase
+    const { data: batch, error } = await supabase
       .from("product_batches")
       .update({ status: newStatus })
-      .eq("id", id)
+      .eq("id", Number(id))
       .select()
       .single();
 
     if (error) throw new Error(error.message);
-    return { success: true, message: `Batch marked as ${newStatus}.`, data };
+    return { success: true, message: `Batch status changed to ${newStatus}.`, batch };
   }
 
   const endpoint = newStatus === "blocked" ? `/batches/${id}/block` : `/batches/${id}/unblock`;
-  const response = await apiClient.post(endpoint);
+  const response = await apiClient.patch(endpoint);
   return response.data;
 }
 
-export async function disposeBatchStock(id, { quantity, reason }) {
+export async function disposeBatchStock(id, { quantity, reason, user_id }) {
+  const qtyToDispose = Math.abs(parseFloat(quantity) || 0);
+
   if (isSupabaseConfigured()) {
-    const qtyToDispose = parseFloat(quantity) || 0;
-    const { data: batch, error: getErr } = await supabase
+    const { data: batch, error: bErr } = await supabase
       .from("product_batches")
-      .select("id, product_id, remaining_quantity")
-      .eq("id", id)
+      .select("*, products:product_id (id, name, quantity)")
+      .eq("id", Number(id))
       .single();
 
-    if (getErr) throw new Error(getErr.message);
+    if (bErr) throw new Error(bErr.message);
 
-    const newRemaining = Math.max(0, Number(batch.remaining_quantity || 0) - qtyToDispose);
-    const newStatus = newRemaining <= 0 ? "depleted" : "active";
+    const currentBatchRemaining = Number(batch.remaining_quantity || 0);
+    if (qtyToDispose > currentBatchRemaining) {
+      throw new Error(`Cannot deduct ${qtyToDispose} units; batch only has ${currentBatchRemaining} units remaining.`);
+    }
 
-    const { error: updErr } = await supabase
+    const nextBatchRemaining = currentBatchRemaining - qtyToDispose;
+    const batchStatus = nextBatchRemaining <= 0 ? "depleted" : batch.status;
+
+    // Update batch remaining quantity
+    await supabase
       .from("product_batches")
-      .update({ remaining_quantity: newRemaining, status: newStatus })
-      .eq("id", id);
+      .update({
+        remaining_quantity: nextBatchRemaining,
+        status: batchStatus,
+      })
+      .eq("id", Number(id));
 
-    if (updErr) throw new Error(updErr.message);
+    // Update product overall quantity
+    const prodPrevStock = Number(batch.products?.quantity || 0);
+    const prodNextStock = Math.max(0, prodPrevStock - qtyToDispose);
 
-    // Record stock transaction
+    await supabase
+      .from("products")
+      .update({ quantity: prodNextStock })
+      .eq("id", Number(batch.product_id));
+
+    // Insert stock transaction audit
     await supabase.from("stock_transactions").insert([
       {
-        product_id: batch.product_id,
-        transaction_type: "expired",
+        product_id: Number(batch.product_id),
+        batch_id: Number(id),
+        user_id: user_id || 1,
+        transaction_type: "batch_adjustment",
         quantity: -qtyToDispose,
-        reason: reason || "Expired batch disposal",
+        previous_stock: prodPrevStock,
+        new_stock: prodNextStock,
+        reason: reason || `Adjustment from Batch: ${batch.batch_number}`,
       },
     ]);
 
-    return { success: true, message: "Batch stock disposed successfully." };
+    return {
+      success: true,
+      message: `${qtyToDispose} units deducted from batch ${batch.batch_number}.`,
+    };
   }
 
-  const response = await apiClient.post(`/batches/${id}/dispose`, { quantity, reason });
+  const response = await apiClient.post(`/batches/${id}/dispose`, { quantity: qtyToDispose, reason });
   return response.data;
 }

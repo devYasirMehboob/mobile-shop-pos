@@ -24,6 +24,7 @@ const icons = {
   export: Download,
   products: Package,
   "create-product": PackagePlus,
+  batches: Layers,
   "expired-products": CalendarX,
   "low-stocks": TrendingDown,
   categories: Shapes,

@@ -7,6 +7,7 @@ import Modal from "../components/Modal";
 import useAlert from "../hooks/useAlert";
 import useConfirmation from "../hooks/useConfirmation";
 import normalizeApiError from "../utils/normalizeApiError";
+import { formatCurrency } from "../utils/calculateSaleTotals";
 import {
   getBatches,
   toggleBatchStatus,
@@ -16,13 +17,12 @@ import {
 const defaultFilters = {
   search: "",
   status: "",
-  expiry_state: "",
   page: 1,
   limit: 10,
 };
 
 function formatDate(dateStr) {
-  if (!dateStr) return "-";
+  if (!dateStr) return "—";
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
@@ -38,7 +38,12 @@ function formatDate(dateStr) {
 
 function BatchesPage() {
   const [batches, setBatches] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, total_pages: 1, total: 0, limit: 10 });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    total_pages: 1,
+    total: 0,
+    limit: 10,
+  });
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [loading, setLoading] = useState(true);
@@ -48,6 +53,7 @@ function BatchesPage() {
   const alert = useAlert();
   const confirm = useConfirmation();
 
+  // Adjust / Dispose Batch Modal State
   const [disposeBatch, setDisposeBatch] = useState(null);
   const [disposeQty, setDisposeQty] = useState("");
   const [disposeReason, setDisposeReason] = useState("");
@@ -58,8 +64,16 @@ function BatchesPage() {
       isRefresh ? setIsRefreshing(true) : setLoading(true);
       try {
         const data = await getBatches(f);
-        setBatches(data.batches || []);
-        setPagination(data.pagination || { page: 1, total_pages: 1, total: (data.batches || []).length, limit: 10 });
+        const list = data.batches || [];
+        setBatches(list);
+        setPagination(
+          data.pagination || {
+            page: f.page || 1,
+            total_pages: Math.ceil(list.length / (f.limit || 10)) || 1,
+            total: list.length,
+            limit: f.limit || 10,
+          }
+        );
         setAppliedFilters(f);
       } catch (e) {
         alert.error(normalizeApiError(e).message);
@@ -72,7 +86,7 @@ function BatchesPage() {
   );
 
   useEffect(() => {
-    document.title = "Expired Products | Dreams POS";
+    document.title = "Batches | Dreams POS";
     loadBatches(defaultFilters);
   }, [loadBatches]);
 
@@ -86,12 +100,6 @@ function BatchesPage() {
     const status = e.target.value;
     setFilters((f) => ({ ...f, status, page: 1 }));
     loadBatches({ ...appliedFilters, status, page: 1 });
-  }
-
-  function handleExpiryStateChange(e) {
-    const expiry_state = e.target.value;
-    setFilters((f) => ({ ...f, expiry_state, page: 1 }));
-    loadBatches({ ...appliedFilters, expiry_state, page: 1 });
   }
 
   function changePage(page) {
@@ -121,21 +129,25 @@ function BatchesPage() {
     setSelectedIds(next);
   }
 
-  async function handleBlock(batch) {
-    const isBlocked = batch.status === "blocked";
-    const confirmed = await confirm({
-      title: isBlocked ? "Unblock Batch" : "Block Batch",
-      description: isBlocked
-        ? `Are you sure you want to unblock batch "${batch.batch_number}"? It will be available for sales again.`
-        : `Are you sure you want to block batch "${batch.batch_number}"? It will not be sold in POS.`,
-      confirmText: isBlocked ? "Unblock" : "Block",
-      tone: isBlocked ? "primary" : "danger",
+  async function handleToggleStatus(batch) {
+    const newStatus = batch.status === "active" ? "blocked" : "active";
+    const ok = await confirm({
+      title: `${newStatus === "blocked" ? "Block" : "Activate"} Batch?`,
+      description: `Are you sure you want to ${
+        newStatus === "blocked" ? "block" : "activate"
+      } batch "${batch.batch_number}"? ${
+        newStatus === "blocked"
+          ? "Blocked batches cannot be sold at checkout."
+          : "Active batches will be available for POS sales."
+      }`,
+      confirmText: newStatus === "blocked" ? "Block Batch" : "Activate Batch",
+      tone: newStatus === "blocked" ? "danger" : "primary",
     });
-    if (!confirmed) return;
+    if (!ok) return;
 
     try {
-      const res = await toggleBatchStatus(batch.id, isBlocked ? "active" : "blocked");
-      alert.success(res.message || "Batch status updated.");
+      const res = await toggleBatchStatus(batch.id, newStatus);
+      alert.success(res.message || `Batch ${newStatus}.`);
       loadBatches(appliedFilters);
     } catch (e) {
       alert.error(normalizeApiError(e).message);
@@ -144,17 +156,18 @@ function BatchesPage() {
 
   async function handleDisposeSubmit(e) {
     e.preventDefault();
-    if (!disposeQty || Number(disposeQty) <= 0) {
-      alert.error("Enter a valid quantity to dispose.");
+    const qty = parseFloat(disposeQty);
+    if (!qty || qty <= 0) {
+      alert.error("Please enter a valid quantity greater than 0.");
       return;
     }
     setBusy(true);
     try {
       const res = await disposeBatchStock(disposeBatch.id, {
         quantity: disposeQty,
-        reason: disposeReason || "Expired batch disposal",
+        reason: disposeReason || "Stock lot deduction",
       });
-      alert.success(res.message || "Batch disposed successfully.");
+      alert.success(res.message || "Batch stock deducted successfully.");
       setDisposeBatch(null);
       setDisposeQty("");
       setDisposeReason("");
@@ -166,24 +179,38 @@ function BatchesPage() {
     }
   }
 
+  // Top Metrics Calculation
+  const totalBatchesCount = batches.length;
+  const activeBatchesCount = batches.filter(
+    (b) => Number(b.remaining_quantity || 0) > 0 && b.status === "active"
+  ).length;
+  const depletedBatchesCount = batches.filter(
+    (b) => Number(b.remaining_quantity || 0) <= 0 || b.status === "depleted"
+  ).length;
+  const totalBatchValue = batches.reduce(
+    (acc, b) =>
+      acc + Number(b.remaining_quantity || 0) * Number(b.unit_cost || 0),
+    0
+  );
+
   return (
     <div className="space-y-5 pb-8">
       {/* 1. TOP HEADER & BREADCRUMB + ACTION BUTTONS */}
       <section className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-[#0B1E38] tracking-tight">
-            Expired Products
+            Stock Batches
           </h1>
           <nav className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
             <Link to="/dashboard" className="hover:text-slate-700 transition">
               Dashboard
             </Link>
             <span>›</span>
-            <span className="text-slate-600 font-bold">Expired Products</span>
+            <span className="text-slate-600 font-bold">Batches</span>
           </nav>
         </div>
 
-        {/* Right Actions: PDF, Excel, Refresh, Collapse */}
+        {/* Right Actions: PDF, Excel, Refresh, + Receive Stock Batch */}
         <div className="flex flex-wrap items-center gap-2">
           {/* PDF Export Icon */}
           <button
@@ -199,7 +226,7 @@ function BatchesPage() {
           {/* Excel Export Icon */}
           <button
             type="button"
-            onClick={() => alert.success("Excel export generated.")}
+            onClick={() => alert.success("Batches inventory exported.")}
             className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
             title="Export Excel"
             aria-label="Export Excel"
@@ -223,22 +250,75 @@ function BatchesPage() {
               }`}
             />
           </button>
-
-          {/* Collapse Chevron Button */}
-          <button
-            type="button"
-            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition"
-            title="Toggle View"
-            aria-label="Toggle View"
-          >
-            <Icon name="chevron-left" className="size-4 rotate-90" />
-          </button>
         </div>
       </section>
 
-      {/* 2. EXPIRED PRODUCTS WHITE CONTAINER */}
+      {/* 2. TOP 4 SUMMARY METRIC CARDS */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">Total Batches</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600 text-xs font-black">
+              📦
+            </span>
+          </div>
+          <p className="mt-2 text-2xl font-black text-[#0B1E38] tracking-tight">
+            {totalBatchesCount}
+          </p>
+          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+            Recorded Stock Lots
+          </span>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">Active In-Stock Lots</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-emerald-50 text-emerald-600 text-xs font-black">
+              ✓
+            </span>
+          </div>
+          <p className="mt-2 text-2xl font-black text-emerald-600 tracking-tight">
+            {activeBatchesCount}
+          </p>
+          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+            Available for Sale
+          </span>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">Total Batch Stock Value</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-orange-50 text-[#FF9F43] text-xs font-black">
+              💰
+            </span>
+          </div>
+          <p className="mt-2 text-2xl font-black text-[#FF9F43] tracking-tight">
+            {formatCurrency(totalBatchValue)}
+          </p>
+          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+            Cost Value of Remaining Lots
+          </span>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500">Depleted Lots</span>
+            <span className="grid size-7 place-items-center rounded-lg bg-slate-100 text-slate-600 text-xs font-black">
+              0
+            </span>
+          </div>
+          <p className="mt-2 text-2xl font-black text-slate-700 tracking-tight">
+            {depletedBatchesCount}
+          </p>
+          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
+            Fully Sold Out Lots
+          </span>
+        </div>
+      </section>
+
+      {/* 3. BATCHES WHITE CONTAINER */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
-        {/* Search & Filter Bar */}
+        {/* Search & Status Filter Bar */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-5">
           {/* Search Box */}
           <div className="relative w-full sm:max-w-xs">
@@ -248,44 +328,25 @@ function BatchesPage() {
             />
             <input
               type="text"
-              placeholder="Search Batch or Product..."
+              placeholder="Search Batch #, Product, SKU..."
               value={filters.search}
               onChange={handleSearchChange}
               className="w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-9 pr-4 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
             />
           </div>
 
-          {/* Filter Dropdowns on Right */}
+          {/* Filter Dropdown on Right */}
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-            {/* Status Filter */}
             <div className="relative">
               <select
                 value={filters.status}
                 onChange={handleStatusChange}
                 className="appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
               >
-                <option value="">Status ⌄</option>
-                <option value="active">Active</option>
+                <option value="">All Statuses ⌄</option>
+                <option value="active">Active (In-Stock)</option>
                 <option value="blocked">Blocked</option>
                 <option value="depleted">Depleted</option>
-              </select>
-              <Icon
-                name="chevron-down"
-                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-slate-400"
-              />
-            </div>
-
-            {/* Expiry State Filter */}
-            <div className="relative">
-              <select
-                value={filters.expiry_state}
-                onChange={handleExpiryStateChange}
-                className="appearance-none rounded-xl border border-slate-200 bg-white pl-3.5 pr-8 py-2 text-xs font-bold text-slate-700 shadow-2xs outline-none transition hover:border-slate-300 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100 cursor-pointer"
-              >
-                <option value="">Expiry State ⌄</option>
-                <option value="expired">Expired Only</option>
-                <option value="near_expiry">Near Expiry (30 Days)</option>
-                <option value="valid">Valid (Safe)</option>
               </select>
               <Icon
                 name="chevron-down"
@@ -295,16 +356,16 @@ function BatchesPage() {
           </div>
         </div>
 
-        {/* 3. TABLE OR LOADING / EMPTY STATE */}
+        {/* 4. TABLE OR LOADING / EMPTY STATE */}
         {loading ? (
-          <div className="py-12">
-            <LoadingState label="Loading expired batches..." />
+          <div className="py-16">
+            <LoadingState label="Loading stock batches..." />
           </div>
         ) : batches.length === 0 ? (
           <EmptyState
-            icon="expired-products"
-            title="No expired products found"
-            description="Adjust your filters or monitor upcoming product batches."
+            icon="batches"
+            title="No stock batches found"
+            description="Purchased stock lots and shipments will automatically appear and track here."
           />
         ) : (
           <div className="overflow-x-auto">
@@ -321,11 +382,13 @@ function BatchesPage() {
                       onChange={toggleSelectAll}
                     />
                   </th>
-                  <th className="px-4 py-3.5">SKU / Batch ⇅</th>
+                  <th className="px-4 py-3.5">Batch / Lot #</th>
                   <th className="px-4 py-3.5">Product Name</th>
-                  <th className="px-4 py-3.5">Manufactured Date</th>
-                  <th className="px-4 py-3.5">Expired Date</th>
-                  <th className="px-4 py-3.5">Qty</th>
+                  <th className="px-4 py-3.5 text-center">Received Qty</th>
+                  <th className="px-4 py-3.5 text-center">Remaining Stock</th>
+                  <th className="px-4 py-3.5 text-right">Unit Cost</th>
+                  <th className="px-4 py-3.5 text-right">Lot Value</th>
+                  <th className="px-4 py-3.5">Received Date</th>
                   <th className="px-4 py-3.5">Status</th>
                   <th className="px-4 py-3.5 text-right">Action</th>
                 </tr>
@@ -334,13 +397,10 @@ function BatchesPage() {
               <tbody className="divide-y divide-slate-100 font-medium">
                 {batches.map((b) => {
                   const isSelected = selectedIds.has(b.id);
-                  const isExpired =
-                    b.expiry_date && new Date(b.expiry_date) < new Date();
-                  const isNearExpiry =
-                    b.expiry_date &&
-                    !isExpired &&
-                    new Date(b.expiry_date) <=
-                      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                  const remQty = Number(b.remaining_quantity || 0);
+                  const recQty = Number(b.received_quantity || remQty);
+                  const unitCost = Number(b.unit_cost || 0);
+                  const totalVal = remQty * unitCost;
 
                   return (
                     <tr
@@ -359,114 +419,119 @@ function BatchesPage() {
                         />
                       </td>
 
-                      {/* Batch Code */}
-                      <td className="px-4 py-3.5 font-bold text-slate-600">
-                        {b.batch_number}
+                      {/* Batch # */}
+                      <td className="px-4 py-3.5 font-mono font-bold text-[#0B1E38]">
+                        {b.batch_number || `BATCH-${b.id}`}
                       </td>
 
-                      {/* Product Name & Icon */}
+                      {/* Product Name */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-700 font-black text-xs overflow-hidden border border-slate-200/60 shadow-2xs">
-                            {b.product_image ? (
-                              <img
-                                src={b.product_image}
-                                alt=""
-                                className="size-full object-cover"
-                              />
-                            ) : (
-                              <Icon name="products" className="size-5 text-slate-400" />
-                            )}
+                        <div className="flex items-center gap-2.5">
+                          <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-orange-50 text-[#FF9F43] font-black text-xs border border-orange-200/40 shadow-2xs">
+                            {b.product_name?.charAt(0) || "P"}
                           </div>
                           <div>
-                            <strong className="block text-xs font-extrabold text-[#0B1E38]">
-                              {b.product_name}
+                            <strong className="block text-xs font-bold text-[#0B1E38]">
+                              {b.product_name || "Product"}
                             </strong>
-                            <span className="block text-[10px] text-slate-400 font-medium">
-                              ID: #{b.product_code || b.product_id}
+                            <span className="block text-[10px] font-mono text-slate-400">
+                              {b.product_code || b.barcode || `PRD-${b.product_id}`}
                             </span>
                           </div>
                         </div>
                       </td>
 
-                      {/* Manufactured Date */}
-                      <td className="px-4 py-3.5 text-slate-600 font-semibold whitespace-nowrap">
-                        {formatDate(b.manufacturing_date)}
+                      {/* Received Qty */}
+                      <td className="px-4 py-3.5 text-center font-semibold text-slate-600">
+                        {recQty} Units
                       </td>
 
-                      {/* Expired Date */}
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        <span
-                          className={`font-bold ${
-                            isExpired
-                              ? "text-rose-600"
-                              : isNearExpiry
-                              ? "text-[#FF9F43]"
-                              : "text-slate-600"
+                      {/* Remaining Qty */}
+                      <td className="px-4 py-3.5 text-center">
+                        <strong
+                          className={`text-sm font-black ${
+                            remQty <= 0
+                              ? "text-slate-400"
+                              : remQty <= 5
+                              ? "text-amber-600"
+                              : "text-emerald-600"
                           }`}
                         >
-                          {formatDate(b.expiry_date)}
-                        </span>
+                          {remQty} Units
+                        </strong>
                       </td>
 
-                      {/* Qty */}
-                      <td className="px-4 py-3.5 font-black text-slate-800">
-                        {Math.round(Number(b.remaining_quantity || 0))}
+                      {/* Unit Cost */}
+                      <td className="px-4 py-3.5 text-right font-semibold text-slate-700">
+                        {formatCurrency(unitCost)}
                       </td>
 
-                      {/* Status Badge */}
+                      {/* Lot Value */}
+                      <td className="px-4 py-3.5 text-right font-black text-[#0B1E38]">
+                        {formatCurrency(totalVal)}
+                      </td>
+
+                      {/* Received Date */}
+                      <td className="px-4 py-3.5 text-slate-500 font-medium whitespace-nowrap text-[11px]">
+                        {formatDate(b.received_date)}
+                      </td>
+
+                      {/* Status */}
                       <td className="px-4 py-3.5">
-                        {b.status === "active" && (
-                          <span className="inline-block rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
+                        {b.status === "blocked" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200/60">
+                            <span className="size-1.5 rounded-full bg-rose-500" />
+                            Blocked
+                          </span>
+                        ) : remQty <= 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase bg-slate-100 text-slate-600 border border-slate-200/60">
+                            <span className="size-1.5 rounded-full bg-slate-400" />
+                            Depleted
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                            <span className="size-1.5 rounded-full bg-emerald-500" />
                             Active
                           </span>
                         )}
-                        {b.status === "blocked" && (
-                          <span className="inline-block rounded-md bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-800">
-                            Blocked
-                          </span>
-                        )}
-                        {b.status === "depleted" && (
-                          <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-600">
-                            Depleted
-                          </span>
-                        )}
                       </td>
 
-                      {/* Action Buttons */}
+                      {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Block / Unblock Button */}
-                          {b.status !== "depleted" && (
+                          {/* Toggle Status (Block / Activate) */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStatus(b)}
+                            className={`grid size-7 place-items-center rounded-lg border text-xs transition cursor-pointer ${
+                              b.status === "blocked"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                            }`}
+                            title={
+                              b.status === "blocked"
+                                ? "Activate Batch"
+                                : "Block Batch"
+                            }
+                          >
+                            {b.status === "blocked" ? "✓" : "⛔"}
+                          </button>
+
+                          {/* Deduct / Adjust Batch Stock */}
+                          {remQty > 0 && (
                             <button
                               type="button"
-                              onClick={() => handleBlock(b)}
-                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold shadow-2xs transition ${
-                                b.status === "blocked"
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                              }`}
+                              onClick={() => {
+                                setDisposeBatch(b);
+                                setDisposeQty("");
+                                setDisposeReason("");
+                              }}
+                              className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-orange-50 hover:text-[#FF9F43] hover:border-orange-200 transition cursor-pointer"
+                              title="Deduct / Adjust Batch Stock"
                             >
-                              {b.status === "blocked" ? "Unblock" : "Block"}
+                              <Icon name="edit" className="size-3" />
                             </button>
                           )}
-
-                          {/* Dispose Stock Button */}
-                          {b.status !== "depleted" &&
-                            Number(b.remaining_quantity) > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDisposeBatch(b);
-                                  setDisposeQty(Number(b.remaining_quantity));
-                                }}
-                                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-rose-600 shadow-2xs hover:border-rose-300 hover:bg-rose-50 transition cursor-pointer"
-                                title="Dispose Expired Stock"
-                                aria-label="Dispose Stock"
-                              >
-                                <Icon name="trash" className="size-3.5" />
-                              </button>
-                            )}
                         </div>
                       </td>
                     </tr>
@@ -477,128 +542,88 @@ function BatchesPage() {
           </div>
         )}
 
-        {/* 4. FOOTER PAGINATION & ROWS PER PAGE */}
-        <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
-          {/* Left: Row Per Page */}
-          <div className="flex items-center gap-2 text-slate-500 font-semibold">
-            <span>Row Per Page</span>
-            <div className="relative">
+        {/* 5. FOOTER PAGINATION */}
+        {!loading && batches.length > 0 && (
+          <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 text-xs">
+            <div className="flex items-center gap-2 text-slate-500 font-semibold">
+              <span>Rows per page</span>
               <select
                 value={pagination.limit || 10}
                 onChange={(e) => changeLimit(e.target.value)}
-                className="appearance-none rounded-lg border border-slate-200 bg-white pl-2.5 pr-7 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-700 shadow-2xs outline-none cursor-pointer"
               >
                 <option value="10">10</option>
-                <option value="20">20</option>
+                <option value="25">25</option>
                 <option value="50">50</option>
               </select>
-              <Icon
-                name="chevron-down"
-                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 size-2.5 text-slate-400"
-              />
+              <span>of {pagination.total} batches</span>
             </div>
-            <span>Entries</span>
-          </div>
 
-          {/* Right: Numbered Pagination Controls (< 1 2 3 [4] ... 15 >) */}
-          <div className="flex items-center gap-1.5">
-            {/* Previous Page */}
-            <button
-              type="button"
-              disabled={pagination.page <= 1}
-              onClick={() => changePage(pagination.page - 1)}
-              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
-              aria-label="Previous Page"
-            >
-              ‹
-            </button>
-
-            {/* Dynamic page numbers */}
-            {Array.from(
-              { length: Math.min(5, pagination.total_pages || 1) },
-              (_, i) => i + 1
-            ).map((pageNum) => (
+            <div className="flex items-center gap-1.5">
               <button
-                key={pageNum}
                 type="button"
-                onClick={() => changePage(pageNum)}
-                className={`grid size-8 place-items-center rounded-lg text-xs font-bold transition cursor-pointer ${
-                  pagination.page === pageNum
-                    ? "bg-[#FF9F43] text-white shadow-xs"
-                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
+                disabled={(pagination.page || 1) <= 1}
+                onClick={() => changePage((pagination.page || 1) - 1)}
+                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
               >
-                {pageNum}
+                ‹
               </button>
-            ))}
-
-            {pagination.total_pages > 5 && (
-              <>
-                <span className="px-1 text-slate-400">...</span>
-                <button
-                  type="button"
-                  onClick={() => changePage(pagination.total_pages)}
-                  className="grid size-8 place-items-center rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  {pagination.total_pages}
-                </button>
-              </>
-            )}
-
-            {/* Next Page */}
-            <button
-              type="button"
-              disabled={pagination.page >= pagination.total_pages}
-              onClick={() => changePage(pagination.page + 1)}
-              className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
-              aria-label="Next Page"
-            >
-              ›
-            </button>
+              <span className="px-2 font-bold text-slate-700">
+                Page {pagination.page || 1} of {pagination.total_pages || 1}
+              </span>
+              <button
+                type="button"
+                disabled={(pagination.page || 1) >= (pagination.total_pages || 1)}
+                onClick={() => changePage((pagination.page || 1) + 1)}
+                className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 disabled:opacity-40 transition cursor-pointer"
+              >
+                ›
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
-      {/* DISPOSE STOCK MODAL */}
+      {/* 6. DEDUCT / DISPOSE BATCH STOCK MODAL */}
       <Modal
         isOpen={Boolean(disposeBatch)}
+        title={`Deduct Stock — ${disposeBatch?.batch_number || "Batch"}`}
+        description={`Product: ${disposeBatch?.product_name || "Product"} · Remaining in Lot: ${disposeBatch?.remaining_quantity || 0} Units`}
         onClose={() => setDisposeBatch(null)}
-        title="Dispose Expired Stock"
-        description={`Dispose remaining stock for batch ${disposeBatch?.batch_number}.`}
-        size="sm"
+        size="md"
       >
         <form onSubmit={handleDisposeSubmit} className="space-y-4 p-5">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Quantity to Dispose <span className="text-rose-500">*</span>
+              Quantity to Deduct <span className="text-rose-500">*</span>
             </label>
             <input
               type="number"
-              min="0.001"
+              min="1"
+              max={disposeBatch?.remaining_quantity || 9999}
               step="any"
-              max={disposeBatch?.remaining_quantity}
               required
+              placeholder={`Max: ${disposeBatch?.remaining_quantity || 0}`}
               value={disposeQty}
               onChange={(e) => setDisposeQty(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
             />
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Disposal Reason
+              Reason for Lot Deduction
             </label>
             <input
               type="text"
-              required
-              placeholder="e.g. Expired shelf-life, damaged packaging"
+              placeholder="e.g. Damaged in shipment, Return to vendor, Quality check failure"
               value={disposeReason}
               onChange={(e) => setDisposeReason(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-3">
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setDisposeBatch(null)}
@@ -609,10 +634,10 @@ function BatchesPage() {
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-rose-600 px-5 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-rose-700 transition disabled:opacity-60 cursor-pointer"
+              className="rounded-xl bg-rose-600 px-5 py-2 text-xs font-black text-white shadow-sm hover:bg-rose-700 transition disabled:opacity-60 cursor-pointer"
               disabled={busy}
             >
-              {busy ? "Processing..." : "Confirm Disposal"}
+              {busy ? "Deducting..." : "Confirm Deduction"}
             </button>
           </div>
         </form>

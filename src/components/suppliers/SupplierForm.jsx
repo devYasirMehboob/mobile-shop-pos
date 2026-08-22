@@ -4,14 +4,10 @@ import Icon from "../Icon";
 
 const emptySupplier = {
   name: "",
-  supplier_code: "",
-  company_name: "",
   contact_person: "",
   phone: "",
   alternate_phone: "",
   email: "",
-  city: "",
-  country: "",
   address: "",
   opening_balance: "0.00",
   notes: "",
@@ -32,14 +28,19 @@ function SupplierForm({
     if (open) {
       if (supplier) {
         setForm({
-          ...emptySupplier,
-          ...supplier,
+          name: supplier.name || "",
+          contact_person: supplier.contact_person || "",
+          phone: supplier.phone || "",
+          alternate_phone: supplier.alternate_phone || "",
+          email: supplier.email || "",
+          address: supplier.address || "",
           opening_balance: supplier.opening_balance ?? "0.00",
+          notes: supplier.notes || "",
+          status: supplier.status || "active",
         });
       } else {
         setForm({
           ...emptySupplier,
-          supplier_code: `SU${Math.floor(100 + Math.random() * 900)}`,
         });
       }
     }
@@ -58,67 +59,96 @@ function SupplierForm({
   return (
     <Modal
       isOpen={open}
-      title={supplier ? "Edit Supplier" : "Add New Supplier"}
-      description="Keep vendor contact details, tax numbers, and payable accounts accurate."
+      title={supplier ? `Edit Supplier — ${supplier.name}` : "Add New Supplier"}
+      description="Manage vendor contact information, phone numbers, addresses, and balance."
       onClose={busy ? () => {} : onClose}
       size="lg"
     >
       <form onSubmit={handleSubmit}>
         <div className="max-h-[72vh] overflow-y-auto p-6 space-y-5">
-          {/* Row 1: Name & Supplier Code */}
+          {/* Row 1: Supplier Name & Contact Person */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Supplier Name <span className="text-rose-500">*</span>
+                Supplier / Company Name <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 name="name"
                 required
-                value={form.name || ""}
+                value={form.name}
                 onChange={handleChange}
-                placeholder="e.g. Apex Computers Ltd."
+                placeholder="e.g. Apex Mobiles Wholesale, Nadeem Vijhi..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
               {errors.name && (
-                <p className="mt-1 text-xs text-rose-500 font-semibold">{errors.name[0] || errors.name}</p>
+                <p className="mt-1 text-xs text-rose-500 font-semibold">
+                  {Array.isArray(errors.name) ? errors.name[0] : errors.name}
+                </p>
               )}
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Supplier Code
+                Contact Person / Representative
               </label>
               <input
                 type="text"
-                name="supplier_code"
-                value={form.supplier_code || ""}
+                name="contact_person"
+                value={form.contact_person}
                 onChange={handleChange}
-                placeholder="e.g. SU001"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-mono font-bold text-slate-700 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+                placeholder="e.g. Muhammad Ali, Nadeem..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
+              {errors.contact_person && (
+                <p className="mt-1 text-xs text-rose-500 font-semibold">
+                  {Array.isArray(errors.contact_person)
+                    ? errors.contact_person[0]
+                    : errors.contact_person}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Row 2: Phone & Email */}
+          {/* Row 2: Primary Phone & WhatsApp / Alternate Phone */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Phone Number
+                Primary Phone Number <span className="text-rose-500">*</span>
               </label>
               <input
                 type="tel"
                 name="phone"
-                value={form.phone || ""}
+                required
+                value={form.phone}
                 onChange={handleChange}
-                placeholder="+92 300 1234567"
+                placeholder="e.g. 03143328315"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
               {errors.phone && (
-                <p className="mt-1 text-xs text-rose-500 font-semibold">{errors.phone[0] || errors.phone}</p>
+                <p className="mt-1 text-xs text-rose-500 font-semibold">
+                  {Array.isArray(errors.phone) ? errors.phone[0] : errors.phone}
+                </p>
               )}
             </div>
 
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                WhatsApp / Alternate Phone
+              </label>
+              <input
+                type="tel"
+                name="alternate_phone"
+                value={form.alternate_phone}
+                onChange={handleChange}
+                placeholder="e.g. 03001234567"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+              />
+            </div>
+          </div>
+
+          {/* Row 3: Email & Opening Balance */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Email Address
@@ -126,66 +156,38 @@ function SupplierForm({
               <input
                 type="email"
                 name="email"
-                value={form.email || ""}
+                value={form.email}
                 onChange={handleChange}
                 placeholder="vendor@example.com"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
               {errors.email && (
-                <p className="mt-1 text-xs text-rose-500 font-semibold">{errors.email[0] || errors.email}</p>
+                <p className="mt-1 text-xs text-rose-500 font-semibold">
+                  {Array.isArray(errors.email) ? errors.email[0] : errors.email}
+                </p>
               )}
             </div>
-          </div>
-
-          {/* Row 3: City, Country, Opening Balance */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                City
-              </label>
-              <input
-                type="text"
-                name="city"
-                value={form.city || ""}
-                onChange={handleChange}
-                placeholder="e.g. Lahore, Karachi, Tokyo"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
-              />
-            </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Country
-              </label>
-              <input
-                type="text"
-                name="country"
-                value={form.country || ""}
-                onChange={handleChange}
-                placeholder="e.g. Pakistan, China, USA"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Opening Balance
+                Opening Balance (Rs)
               </label>
               <input
                 type="number"
                 step="0.01"
-                min="0"
                 name="opening_balance"
-                disabled={Boolean(supplier)}
-                value={form.opening_balance ?? "0.00"}
+                value={form.opening_balance}
                 onChange={handleChange}
                 placeholder="0.00"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 disabled:opacity-60"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
+              <span className="mt-1 block text-[10px] text-slate-400 font-medium">
+                Initial payable amount on vendor registration.
+              </span>
             </div>
           </div>
 
-          {/* Row 4: Address */}
+          {/* Row 4: Shop / Warehouse Address */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
               Shop / Warehouse Address
@@ -193,27 +195,43 @@ function SupplierForm({
             <textarea
               rows={2}
               name="address"
-              value={form.address || ""}
+              value={form.address}
               onChange={handleChange}
-              placeholder="e.g. Plaza 4, Hafeez Center, Main Boulevard..."
+              placeholder="e.g. Shop #12, Hafeez Center, Vehari Goal Chowk..."
               className="w-full rounded-xl border border-slate-200 bg-slate-50/40 p-3 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 resize-none"
             />
           </div>
 
-          {/* Row 5: Status */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Account Status
-            </label>
-            <select
-              name="status"
-              value={form.status || "active"}
-              onChange={handleChange}
-              className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 cursor-pointer"
-            >
-              <option value="active">Active (Permitted for Invoices &amp; Purchases)</option>
-              <option value="inactive">Inactive (Archived / Suspended)</option>
-            </select>
+          {/* Row 5: Notes & Account Status */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Notes &amp; Payment Terms
+              </label>
+              <input
+                type="text"
+                name="notes"
+                value={form.notes}
+                onChange={handleChange}
+                placeholder="e.g. 15-day credit, City: Lahore, Bank: Meezan"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Account Status
+              </label>
+              <select
+                name="status"
+                value={form.status}
+                onChange={handleChange}
+                className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-2.5 text-xs font-semibold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:bg-white focus:ring-4 focus:ring-orange-100 cursor-pointer"
+              >
+                <option value="active">Active (Permitted for Invoices &amp; Purchases)</option>
+                <option value="inactive">Inactive (Archived / Suspended)</option>
+              </select>
+            </div>
           </div>
         </div>
 

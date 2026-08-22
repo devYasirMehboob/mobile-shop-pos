@@ -18,7 +18,7 @@ const sidebarGroups = [
     items: [
       { label: "Products", path: "/products", icon: "products", permission: "products.view" },
       { label: "Create Product", path: "/products?action=new", icon: "create-product", permission: "products.create" },
-      { label: "Expired Products", path: "/batches", icon: "expired-products", permission: "inventory.view" },
+      { label: "Batches", path: "/batches", icon: "batches", permission: "inventory.view" },
       { label: "Low Stocks", path: "/inventory?filter=low", icon: "low-stocks", permission: "inventory.view" },
       { label: "Category", path: "/categories", icon: "categories", permission: "categories.manage" },
       { label: "Units", path: "/units", icon: "units", permission: "categories.manage" },

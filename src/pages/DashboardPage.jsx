@@ -69,9 +69,8 @@ function DashboardPage() {
       {/* 1. HERO GREETING & LOW STOCK ALERT BANNER */}
       <DreamsHeroSection
         todayOrders={summary.today_orders ?? 0}
-        lowStockProduct={
-          dashboard.low_stock_products?.[0]?.name || "Products in inventory"
-        }
+        lowStockProducts={dashboard.low_stock_products || []}
+        outOfStockProducts={dashboard.out_of_stock_products || []}
       />
 
       {/* 2. TOP METRIC CARDS (4 Solid Banner Cards + 4 White Metric Cards) */}

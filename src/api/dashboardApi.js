@@ -296,6 +296,7 @@ export async function getDashboard() {
       monthly_chart: monthlyData,
       best_selling_products: bestSellingProducts,
       low_stock_products: lowStockProductsList,
+      out_of_stock_products: activeProducts.filter((p) => p.track_stock === 1 && Number(p.quantity) <= 0),
       recent_sales: recentSalesFormatted,
       recent_transactions: recentTransactionsFormatted,
       top_customers: topCustomers,

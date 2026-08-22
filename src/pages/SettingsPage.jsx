@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   getSettings,
   removeShopLogo,
@@ -37,9 +37,18 @@ function SettingsPage() {
     return settingsSections.filter((s) => s.allUsers);
   }, [isSuperAdmin]);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+
+  // Determine active tab from URL or fallback
+  const active = useMemo(() => {
+    const matched = visibleSections.find((s) => s.key === tabParam);
+    if (matched) return matched.key;
+    return visibleSections[0]?.key || "profile";
+  }, [tabParam, visibleSections]);
+
   const [settings, setSettings] = useState(null);
   const [original, setOriginal] = useState(null);
-  const [active, setActive] = useState(isSuperAdmin ? "profile" : "profile");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const alert = useAlert();
@@ -53,10 +62,11 @@ function SettingsPage() {
     [active]
   );
 
-  const dirty =
-    active !== "profile" && settings && original && settings[active] && original[active]
-      ? JSON.stringify(settings[active]) !== JSON.stringify(original[active])
-      : false;
+  const dirty = useMemo(() => {
+    if (active === "profile" || !settings || !original) return false;
+    if (!settings[active] || !original[active]) return false;
+    return JSON.stringify(settings[active]) !== JSON.stringify(original[active]);
+  }, [active, settings, original]);
 
   async function load() {
     setLoading(true);
@@ -90,42 +100,52 @@ function SettingsPage() {
   }, [dirty]);
 
   async function select(next) {
+    if (next === active) return;
+
     if (dirty) {
       const confirmed = await confirm({
         title: "Unsaved Changes",
-        description: "Discard unsaved changes in this settings section?",
-        confirmText: "Discard",
+        description: "You have unsaved changes in this section. Discard edits?",
+        confirmText: "Discard Edits",
         tone: "warning",
       });
       if (!confirmed) return;
+
+      // Revert edits for current section
+      if (settings && original && settings[active]) {
+        setSettings((current) => ({
+          ...current,
+          [active]: clone(original[active]),
+        }));
+      }
     }
-    if (dirty && settings && original && settings[active]) {
-      setSettings((current) => ({
-        ...current,
-        [active]: clone(original[active]),
-      }));
-    }
+
     setErrors({});
     setFormError(null);
-    setActive(next);
+    setSearchParams({ tab: next }, { replace: true });
   }
 
   function change(key, value) {
-    setSettings((current) => ({
-      ...current,
-      [active]: { ...current[active], [key]: value },
-    }));
+    setSettings((current) => {
+      const currentGroup = current?.[active] || {};
+      return {
+        ...current,
+        [active]: { ...currentGroup, [key]: value },
+      };
+    });
     setErrors((current) => ({ ...current, [key]: undefined }));
   }
 
   async function submit(event) {
-    event.preventDefault();
-    if (!dirty || active === "profile") return;
+    if (event) event.preventDefault();
+    if (!dirty || active === "profile" || busy) return;
+
     setBusy(true);
     setFormError(null);
     setErrors({});
     try {
-      const response = await updateSettings(active, settings[active]);
+      const payload = settings[active];
+      const response = await updateSettings(active, payload);
       const fresh = await getSettings();
       setSettings(fresh);
       setOriginal(clone(fresh));
@@ -230,7 +250,9 @@ function SettingsPage() {
               {can("dashboard.view") ? "Dashboard" : "POS Workspace"}
             </Link>
             <span>›</span>
-            <span className="text-slate-600 font-bold">Settings</span>
+            <span className="text-slate-600 font-bold">
+              {section?.label || "Settings"}
+            </span>
           </nav>
         </div>
 
@@ -257,16 +279,16 @@ function SettingsPage() {
       )}
 
       {/* 2. 2-COLUMN SETTINGS LAYOUT */}
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Main Section */}
         <main className="min-w-0">
           {active === "profile" ? (
             <UserProfileSettings />
           ) : (
-            <>
+            <form onSubmit={submit}>
               {active === "shop" && (
                 <LogoUploader
-                  shop={settings.shop}
+                  shop={settings.shop || {}}
                   isBusy={busy}
                   onUpload={upload}
                   onRemove={remove}
@@ -275,19 +297,19 @@ function SettingsPage() {
 
               <SettingsSectionForm
                 section={section}
-                values={settings[active]}
+                values={settings[active] || {}}
                 errors={errors}
                 onChange={change}
                 disabled={busy}
               />
 
               <SettingsSaveBar
-                isDirty={dirty}
-                isBusy={busy}
+                dirty={dirty}
+                busy={busy}
                 onSave={submit}
                 onReset={reset}
               />
-            </>
+            </form>
           )}
         </main>
 

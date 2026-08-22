@@ -4,21 +4,22 @@ import apiClient from "../../api/apiClient";
 
 const shopImageUrl = (url) => {
   if (!url) return "";
-  if (url.startsWith("http")) return url;
+  if (url.startsWith("http") || url.startsWith("data:")) return url;
   return new URL(url, apiClient.defaults.baseURL).href;
 };
 
-function LogoUploader({ shop, isBusy, onUpload, onRemove }) {
+function LogoUploader({ shop = {}, isBusy, onUpload, onRemove }) {
   const input = useRef(null);
+  const logoSrc = shop?.logo || shop?.logo_url || "";
 
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs mb-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         {/* Logo Preview Square */}
         <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 shadow-2xs">
-          {shop?.logo_url ? (
+          {logoSrc ? (
             <img
-              src={shopImageUrl(shop.logo_url)}
+              src={shopImageUrl(logoSrc)}
               alt="Shop logo"
               className="size-full object-contain p-1.5"
             />
@@ -56,10 +57,10 @@ function LogoUploader({ shop, isBusy, onUpload, onRemove }) {
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#0E2040] px-3.5 py-2 text-xs font-extrabold text-white shadow-2xs hover:bg-[#19325C] transition cursor-pointer disabled:opacity-50"
             >
               <Icon name="upload" className="size-3.5 text-[#FF9F43]" />
-              <span>Upload New Logo</span>
+              <span>{isBusy ? "Processing..." : "Upload New Logo"}</span>
             </button>
 
-            {shop?.logo_url && (
+            {logoSrc && (
               <button
                 type="button"
                 disabled={isBusy}

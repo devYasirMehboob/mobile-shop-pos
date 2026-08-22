@@ -12,7 +12,7 @@ import apiClient from "../../api/apiClient";
 
 const shopImageUrl = (url) => {
   if (!url) return "";
-  if (url.startsWith("http")) return url;
+  if (url.startsWith("http") || url.startsWith("data:")) return url;
   return new URL(url, apiClient.defaults.baseURL).href;
 };
 
@@ -27,7 +27,7 @@ function ReceiptPreview({
   const alert = useAlert();
   const options = receipt?.options || settings?.receipt || {};
   const shop = receipt?.shop || {};
-  const logo = settings?.shop?.logo_url;
+  const logo = receipt?.shop?.logo || receipt?.shop?.logo_url || settings?.shop?.logo || settings?.shop?.logo_url;
   const [isPrinting, setIsPrinting] = useState(false);
 
   const handlePrint = async () => {

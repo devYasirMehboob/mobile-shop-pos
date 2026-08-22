@@ -8,6 +8,8 @@ const sectionIcons = {
   discounts: "tag",
   inventory: "inventory",
   barcode: "barcode",
+  customers: "users",
+  receipt: "printer",
   printer: "printer",
   backups: "backups",
   security: "shield",

@@ -107,11 +107,22 @@ export default function DreamsSidebar({
         {/* LOGO HEADER */}
         <div className="relative flex h-[72px] items-center justify-between px-5 border-b border-[#EAEFF5]">
           <div className="flex items-center gap-2.5">
-            {/* Dreams POS Icon */}
-            <div className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#0E2040] to-[#172E56] shadow-sm">
-              <Icon name="shopping-bag" className="size-5 text-[#FF9F43]" />
-              <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-[#FF9F43] ring-2 ring-white" />
-            </div>
+            {/* Dreams POS Icon / Shop Logo */}
+            {shop.logo || shop.logo_url ? (
+              <div className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-white border border-slate-200/90 shadow-2xs overflow-hidden">
+                <img
+                  src={shop.logo || shop.logo_url}
+                  alt={shop.shop_name || "Logo"}
+                  className="size-full object-contain p-1"
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-[#FF9F43] ring-2 ring-white" />
+              </div>
+            ) : (
+              <div className="relative flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#0E2040] to-[#172E56] shadow-sm">
+                <Icon name="shopping-bag" className="size-5 text-[#FF9F43]" />
+                <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-[#FF9F43] ring-2 ring-white" />
+              </div>
+            )}
 
             {/* Dreams POS Text Brand */}
             <div

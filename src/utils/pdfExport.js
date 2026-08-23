@@ -437,3 +437,516 @@ export async function exportReceiptToPdf(receiptOrElementOrId, invoiceNumber = "
 
   throw new Error("Unable to parse receipt data for PDF generation.");
 }
+
+/**
+ * Renders Purchase Order data to 2D Canvas
+ */
+async function renderPurchaseDataToCanvas(purchase, shop = {}) {
+  const canvasWidth = 580; // 80mm thermal width
+  const margin = 28;
+  const contentWidth = canvasWidth - margin * 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = 3500;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasWidth, 3500);
+
+  let y = 36;
+
+  // Render Shop Logo if available
+  const logoUrl = shop.logo || shop.logo_url;
+  if (logoUrl) {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+        img.src = logoUrl;
+      });
+      if (img.width && img.height) {
+        const maxH = 55;
+        const maxW = 140;
+        const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (canvasWidth - w) / 2, y, w, h);
+        y += h + 14;
+      }
+    } catch {}
+  }
+
+  function drawCenteredText(text, font = "14px monospace", color = "#000000") {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(text, canvasWidth / 2, y);
+    ctx.textAlign = "left";
+  }
+
+  function drawRow(leftText, rightText, font = "14px monospace", color = "#000000", rightColor = null) {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.fillText(leftText, margin, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = rightColor || color;
+    ctx.fillText(rightText, canvasWidth - margin, y);
+    ctx.textAlign = "left";
+  }
+
+  function drawDashedLine(isDouble = false) {
+    y += 10;
+    ctx.save();
+    ctx.strokeStyle = "#333333";
+    ctx.lineWidth = isDouble ? 1.5 : 1;
+    ctx.setLineDash(isDouble ? [6, 3] : [4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(margin, y);
+    ctx.lineTo(canvasWidth - margin, y);
+    ctx.stroke();
+    ctx.restore();
+    y += isDouble ? 22 : 18;
+  }
+
+  // Header
+  const shopName = shop.shop_name || "MOBILE SHOP POS";
+  drawCenteredText(shopName.toUpperCase(), "900 18px system-ui, sans-serif", "#000000");
+  y += 22;
+
+  drawCenteredText("PURCHASE ORDER INVOICE", "bold 13px system-ui, sans-serif", "#444444");
+  y += 24;
+
+  drawRow("PO NUMBER:", purchase.purchase_number || `PUR-${purchase.id}`, "bold 14px monospace", "#000000");
+  y += 22;
+  drawRow("DATE:", formatDateTime(purchase.purchase_date || new Date()), "13px monospace", "#333333");
+  y += 22;
+  drawRow("SUPPLIER:", String(purchase.supplier_name || "Supplier").slice(0, 26), "bold 14px monospace", "#000000");
+  y += 22;
+  if (purchase.supplier_invoice_number) {
+    drawRow("SUP INV #:", purchase.supplier_invoice_number, "13px monospace", "#333333");
+    y += 22;
+  }
+  if (purchase.payment_reference) {
+    drawRow("PAYMENT REF:", purchase.payment_reference, "bold 13px monospace", "#1e40af");
+    y += 22;
+  }
+  drawRow("STATUS:", (purchase.purchase_status || "received").toUpperCase(), "bold 13px monospace", "#000000");
+  y += 12;
+
+  drawDashedLine(true);
+
+  // Table header
+  const colQty = canvasWidth - margin - 220;
+  const colCost = canvasWidth - margin - 120;
+
+  ctx.font = "bold 12px monospace";
+  ctx.fillStyle = "#000000";
+  ctx.fillText("ITEM", margin, y);
+  ctx.fillText("QTY", colQty, y);
+  ctx.fillText("COST", colCost, y);
+  ctx.textAlign = "right";
+  ctx.fillText("TOTAL", canvasWidth - margin, y);
+  ctx.textAlign = "left";
+  y += 4;
+
+  drawDashedLine(false);
+
+  // Items
+  const items = purchase.items || [];
+  for (const it of items) {
+    const pName = it.product_name || it.name || "Item";
+    const qty = Number(it.quantity || 1);
+    const cost = Number(it.unit_cost || 0);
+    const total = Number(it.line_total || qty * cost);
+
+    ctx.font = "bold 13px system-ui, sans-serif";
+    ctx.fillStyle = "#000000";
+    ctx.fillText(pName.length > 20 ? pName.slice(0, 19) + "…" : pName, margin, y);
+
+    ctx.font = "13px monospace";
+    ctx.fillText(String(qty), colQty, y);
+    ctx.fillText(String(cost.toFixed(0)), colCost, y);
+
+    ctx.textAlign = "right";
+    ctx.font = "bold 13px monospace";
+    ctx.fillText(formatCurrency(total), canvasWidth - margin, y);
+    ctx.textAlign = "left";
+    y += 24;
+  }
+
+  y -= 4;
+  drawDashedLine(true);
+
+  // Financials
+  drawRow("Subtotal:", formatCurrency(purchase.subtotal || purchase.grand_total || 0), "14px monospace");
+  y += 22;
+
+  if (Number(purchase.discount_amount) > 0) {
+    drawRow("Discount:", `-${formatCurrency(purchase.discount_amount)}`, "14px monospace", "#d9534f");
+    y += 22;
+  }
+  if (Number(purchase.tax_amount) > 0) {
+    drawRow("Tax (GST):", `+${formatCurrency(purchase.tax_amount)}`, "14px monospace");
+    y += 22;
+  }
+  if (Number(purchase.shipping_amount) > 0) {
+    drawRow("Shipping:", `+${formatCurrency(purchase.shipping_amount)}`, "14px monospace");
+    y += 22;
+  }
+  if (Number(purchase.other_charges) > 0) {
+    drawRow("Other Charges:", `+${formatCurrency(purchase.other_charges)}`, "14px monospace");
+    y += 22;
+  }
+
+  drawDashedLine(false);
+
+  drawRow("TOTAL PAYABLE:", formatCurrency(purchase.grand_total || 0), "900 17px monospace", "#000000");
+  y += 26;
+  drawRow("Amount Paid:", formatCurrency(purchase.amount_paid || 0), "bold 14px monospace", "#15803d");
+  y += 22;
+  drawRow("Balance Due:", formatCurrency(purchase.balance_due || 0), "bold 14px monospace", Number(purchase.balance_due) > 0 ? "#dc2626" : "#15803d");
+  y += 30;
+
+  drawCenteredText("*** Stock Procurement Voucher ***", "italic 12px system-ui", "#666666");
+  y += 30;
+
+  const finalCanvas = document.createElement("canvas");
+  finalCanvas.width = canvasWidth;
+  finalCanvas.height = y;
+  const finalCtx = finalCanvas.getContext("2d");
+  finalCtx.fillStyle = "#ffffff";
+  finalCtx.fillRect(0, 0, canvasWidth, y);
+  finalCtx.drawImage(canvas, 0, 0);
+
+  return finalCanvas;
+}
+
+export async function exportPurchaseToPdf(purchase, shop = {}) {
+  if (!purchase) throw new Error("Purchase data not found for PDF export.");
+  const safeNumber = String(purchase.purchase_number || `PUR-${purchase.id}`).replaceAll("/", "-");
+  const filename = `${safeNumber}.pdf`;
+
+  const canvas = await renderPurchaseDataToCanvas(purchase, shop);
+  const jpegData = canvas.toDataURL("image/jpeg", 0.96);
+
+  const paperWidthMm = 80;
+  const paperHeightMm = Math.max(100, Math.round((canvas.height / canvas.width) * paperWidthMm));
+
+  const pdfBlob = generatePdfFromJpeg(jpegData, paperWidthMm, paperHeightMm);
+  triggerFileDownload(pdfBlob, filename);
+  return true;
+}
+
+/**
+ * Renders Purchase Return Voucher data to 2D Canvas
+ */
+async function renderPurchaseReturnToCanvas(ret, shop = {}) {
+  const canvasWidth = 580; // 80mm thermal width
+  const margin = 28;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = 2500;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasWidth, 2500);
+
+  let y = 36;
+
+  // Render Shop Logo if available
+  const logoUrl = shop.logo || shop.logo_url;
+  if (logoUrl) {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+        img.src = logoUrl;
+      });
+      if (img.width && img.height) {
+        const maxH = 55;
+        const maxW = 140;
+        const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (canvasWidth - w) / 2, y, w, h);
+        y += h + 14;
+      }
+    } catch {}
+  }
+
+  function drawCenteredText(text, font = "14px monospace", color = "#000000") {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(text, canvasWidth / 2, y);
+    ctx.textAlign = "left";
+  }
+
+  function drawRow(leftText, rightText, font = "14px monospace", color = "#000000", rightColor = null) {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.fillText(leftText, margin, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = rightColor || color;
+    ctx.fillText(rightText, canvasWidth - margin, y);
+    ctx.textAlign = "left";
+  }
+
+  function drawDashedLine(isDouble = false) {
+    y += 10;
+    ctx.save();
+    ctx.strokeStyle = "#333333";
+    ctx.lineWidth = isDouble ? 1.5 : 1;
+    ctx.setLineDash(isDouble ? [6, 3] : [4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(margin, y);
+    ctx.lineTo(canvasWidth - margin, y);
+    ctx.stroke();
+    ctx.restore();
+    y += isDouble ? 22 : 18;
+  }
+
+  // Header
+  const shopName = shop.shop_name || "MOBILE SHOP POS";
+  drawCenteredText(shopName.toUpperCase(), "900 18px system-ui, sans-serif", "#000000");
+  y += 22;
+
+  drawCenteredText("PURCHASE RETURN VOUCHER", "bold 13px system-ui, sans-serif", "#c53030");
+  y += 24;
+
+  drawRow("RETURN #:", ret.return_number || `PRET-${ret.id}`, "bold 14px monospace", "#c53030");
+  y += 22;
+  drawRow("ORIGINAL PO:", ret.purchase_number || (ret.purchase_id ? `PUR-${ret.purchase_id}` : "N/A"), "bold 13px monospace", "#000000");
+  y += 22;
+  drawRow("DATE:", formatDateTime(ret.return_date || ret.created_at || new Date()), "13px monospace", "#333333");
+  y += 22;
+  drawRow("SUPPLIER:", String(ret.supplier_name || ret.suppliers?.name || "Supplier").slice(0, 26), "bold 14px monospace", "#000000");
+  y += 22;
+  drawRow("STATUS:", (ret.status || "completed").toUpperCase(), "bold 13px monospace", "#15803d");
+  y += 12;
+
+  drawDashedLine(true);
+
+  // Return Details
+  drawRow("Return Value:", formatCurrency(ret.subtotal || 0), "900 16px monospace", "#c53030");
+  y += 24;
+
+  if (Number(ret.refund_amount) > 0) {
+    drawRow("Refund Received:", formatCurrency(ret.refund_amount), "bold 14px monospace", "#15803d");
+    y += 22;
+  }
+  if (Number(ret.balance_adjustment) > 0) {
+    drawRow("Balance Adjusted:", formatCurrency(ret.balance_adjustment), "bold 14px monospace", "#1d4ed8");
+    y += 22;
+  }
+
+  if (ret.reason) {
+    drawDashedLine(false);
+    ctx.font = "bold 12px monospace";
+    ctx.fillStyle = "#666666";
+    ctx.fillText("REASON FOR RETURN:", margin, y);
+    y += 18;
+    ctx.font = "italic 13px system-ui, sans-serif";
+    ctx.fillStyle = "#000000";
+    ctx.fillText(String(ret.reason).slice(0, 48), margin, y);
+    y += 14;
+  }
+
+  drawDashedLine(true);
+  drawCenteredText("*** Stock Dispatched to Supplier ***", "italic 12px system-ui", "#666666");
+  y += 26;
+
+  const finalCanvas = document.createElement("canvas");
+  finalCanvas.width = canvasWidth;
+  finalCanvas.height = y;
+  const finalCtx = finalCanvas.getContext("2d");
+  finalCtx.fillStyle = "#ffffff";
+  finalCtx.fillRect(0, 0, canvasWidth, y);
+  finalCtx.drawImage(canvas, 0, 0);
+
+  return finalCanvas;
+}
+
+export async function exportPurchaseReturnToPdf(purchaseReturn, shop = {}) {
+  if (!purchaseReturn) throw new Error("Purchase return data not found for PDF export.");
+  const safeNumber = String(purchaseReturn.return_number || `PRET-${purchaseReturn.id}`).replaceAll("/", "-");
+  const filename = `${safeNumber}.pdf`;
+
+  const canvas = await renderPurchaseReturnToCanvas(purchaseReturn, shop);
+  const jpegData = canvas.toDataURL("image/jpeg", 0.96);
+
+  const paperWidthMm = 80;
+  const paperHeightMm = Math.max(80, Math.round((canvas.height / canvas.width) * paperWidthMm));
+
+  const pdfBlob = generatePdfFromJpeg(jpegData, paperWidthMm, paperHeightMm);
+  triggerFileDownload(pdfBlob, filename);
+  return true;
+}
+
+/**
+ * Renders Expense Voucher data to 2D Canvas
+ */
+async function renderExpenseToCanvas(expense, shop = {}) {
+  const canvasWidth = 580; // 80mm thermal width
+  const margin = 28;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = 2500;
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasWidth, 2500);
+
+  let y = 36;
+
+  // Render Shop Logo if available
+  const logoUrl = shop.logo || shop.logo_url;
+  if (logoUrl) {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+        img.src = logoUrl;
+      });
+      if (img.width && img.height) {
+        const maxH = 55;
+        const maxW = 140;
+        const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (canvasWidth - w) / 2, y, w, h);
+        y += h + 14;
+      }
+    } catch {}
+  }
+
+  function drawCenteredText(text, font = "14px monospace", color = "#000000") {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(text, canvasWidth / 2, y);
+    ctx.textAlign = "left";
+  }
+
+  function drawRow(leftText, rightText, font = "14px monospace", color = "#000000", rightColor = null) {
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.fillText(leftText, margin, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = rightColor || color;
+    ctx.fillText(rightText, canvasWidth - margin, y);
+    ctx.textAlign = "left";
+  }
+
+  function drawDashedLine(isDouble = false) {
+    y += 10;
+    ctx.save();
+    ctx.strokeStyle = "#333333";
+    ctx.lineWidth = isDouble ? 1.5 : 1;
+    ctx.setLineDash(isDouble ? [6, 3] : [4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(margin, y);
+    ctx.lineTo(canvasWidth - margin, y);
+    ctx.stroke();
+    ctx.restore();
+    y += isDouble ? 22 : 18;
+  }
+
+  // Header
+  const shopName = shop.shop_name || "MOBILE SHOP POS";
+  drawCenteredText(shopName.toUpperCase(), "900 18px system-ui, sans-serif", "#000000");
+  y += 22;
+
+  drawCenteredText("EXPENSE PAYMENT VOUCHER", "bold 13px system-ui, sans-serif", "#e11d48");
+  y += 24;
+
+  drawRow("EXPENSE #:", expense.expense_number || `EXP-${String(expense.id).padStart(4, "0")}`, "bold 14px monospace", "#e11d48");
+  y += 22;
+  drawRow("DATE:", formatDateTime(expense.expense_date || expense.created_at || new Date()), "13px monospace", "#333333");
+  y += 22;
+  drawRow("CATEGORY:", String(expense.category_name || "General").slice(0, 24), "bold 14px monospace", "#000000");
+  y += 22;
+  drawRow("METHOD:", (expense.payment_method || "cash").toUpperCase().replaceAll("_", " "), "13px monospace", "#000000");
+  y += 22;
+  if (expense.reference_number) {
+    drawRow("REF / BILL #:", String(expense.reference_number).slice(0, 24), "13px monospace", "#000000");
+    y += 22;
+  }
+  drawRow("STATUS:", (expense.status || "active").toUpperCase(), "bold 13px monospace", expense.status === "voided" ? "#e11d48" : "#15803d");
+  y += 12;
+
+  drawDashedLine(true);
+
+  // Purpose / Title
+  ctx.font = "bold 12px monospace";
+  ctx.fillStyle = "#666666";
+  ctx.fillText("EXPENSE PURPOSE / TITLE:", margin, y);
+  y += 18;
+  ctx.font = "bold 14px system-ui, sans-serif";
+  ctx.fillStyle = "#000000";
+  ctx.fillText(String(expense.title).slice(0, 42), margin, y);
+  y += 22;
+
+  drawDashedLine(false);
+
+  // Amount
+  drawRow("TOTAL PAID AMOUNT:", formatCurrency(expense.amount || 0), "900 18px monospace", "#e11d48");
+  y += 26;
+
+  if (expense.description) {
+    drawDashedLine(false);
+    ctx.font = "bold 12px monospace";
+    ctx.fillStyle = "#666666";
+    ctx.fillText("NOTES / AUDIT DETAILS:", margin, y);
+    y += 18;
+    ctx.font = "italic 13px system-ui, sans-serif";
+    ctx.fillStyle = "#000000";
+    ctx.fillText(String(expense.description).slice(0, 48), margin, y);
+    y += 14;
+  }
+
+  drawDashedLine(true);
+  drawCenteredText("*** Approved Financial Record ***", "italic 12px system-ui", "#666666");
+  y += 26;
+
+  const finalCanvas = document.createElement("canvas");
+  finalCanvas.width = canvasWidth;
+  finalCanvas.height = y;
+  const finalCtx = finalCanvas.getContext("2d");
+  finalCtx.fillStyle = "#ffffff";
+  finalCtx.fillRect(0, 0, canvasWidth, y);
+  finalCtx.drawImage(canvas, 0, 0);
+
+  return finalCanvas;
+}
+
+export async function exportExpenseToPdf(expense, shop = {}) {
+  if (!expense) throw new Error("Expense data not found for PDF export.");
+  const safeNumber = String(expense.expense_number || `EXP-${expense.id}`).replaceAll("/", "-");
+  const filename = `${safeNumber}.pdf`;
+
+  const canvas = await renderExpenseToCanvas(expense, shop);
+  const jpegData = canvas.toDataURL("image/jpeg", 0.96);
+
+  const paperWidthMm = 80;
+  const paperHeightMm = Math.max(80, Math.round((canvas.height / canvas.width) * paperWidthMm));
+
+  const pdfBlob = generatePdfFromJpeg(jpegData, paperWidthMm, paperHeightMm);
+  triggerFileDownload(pdfBlob, filename);
+  return true;
+}
+
+
+

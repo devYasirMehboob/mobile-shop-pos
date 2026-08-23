@@ -9,6 +9,7 @@ import EmptyState from "../components/EmptyState";
 import Icon from "../components/Icon";
 import LoadingState from "../components/LoadingState";
 import Modal from "../components/Modal";
+import PurchaseReturnReceiptModal from "../components/purchases/PurchaseReturnReceiptModal";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/calculateSaleTotals";
 import useAlert from "../hooks/useAlert";
 import normalizeApiError from "../utils/normalizeApiError";
@@ -493,60 +494,12 @@ function PurchaseReturnsPage() {
         )}
       </section>
 
-      {/* VIEW RETURN DETAILS MODAL */}
-      <Modal
+      {/* VIEW / PRINT RETURN VOUCHER MODAL */}
+      <PurchaseReturnReceiptModal
         isOpen={Boolean(viewItem)}
-        title={`Purchase Return — ${viewItem?.return_number || ""}`}
-        description="Recorded supplier return and financial settlement."
+        purchaseReturn={viewItem}
         onClose={() => setViewItem(null)}
-        size="md"
-      >
-        {viewItem && (
-          <div className="p-5 space-y-4 text-xs">
-            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 border border-slate-200">
-              <div>
-                <dt className="text-slate-400 font-bold uppercase text-[10px]">Supplier</dt>
-                <dd className="mt-1 font-bold text-slate-800">{viewItem.supplier_name}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400 font-bold uppercase text-[10px]">Original Purchase</dt>
-                <dd className="mt-1 font-mono font-bold text-slate-800">{viewItem.purchase_number}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400 font-bold uppercase text-[10px]">Return Date</dt>
-                <dd className="mt-1 font-semibold text-slate-700">{formatDate(viewItem.return_date)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400 font-bold uppercase text-[10px]">Return Value</dt>
-                <dd className="mt-1 font-black text-rose-600">{formatCurrency(viewItem.subtotal)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400 font-bold uppercase text-[10px]">Cash / Bank Refund</dt>
-                <dd className="mt-1 font-black text-emerald-600">{formatCurrency(viewItem.refund_amount)}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-400 font-bold uppercase text-[10px]">Due Balance Adjusted</dt>
-                <dd className="mt-1 font-black text-blue-600">{formatCurrency(viewItem.balance_adjustment)}</dd>
-              </div>
-            </dl>
-
-            <div className="rounded-xl border border-slate-200 p-3">
-              <span className="text-slate-400 font-bold uppercase text-[10px]">Reason for Return</span>
-              <p className="mt-1 font-medium text-slate-700">{viewItem.reason}</p>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="rounded-xl bg-[#FF9F43] px-4 py-2 text-xs font-black text-white hover:bg-[#F38C2A] transition cursor-pointer"
-              >
-                🖨️ Print Voucher
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      />
 
       {/* ADD PURCHASE RETURN MODAL */}
       <Modal

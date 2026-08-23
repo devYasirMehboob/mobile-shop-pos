@@ -8,6 +8,7 @@ function Modal({
   children,
   size = "md",
   headerActions = null,
+  showCloseButton = true,
 }) {
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -70,16 +71,18 @@ function Modal({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {headerActions}
-            <button
-              className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-            >
-              <span className="text-xl leading-none font-bold" aria-hidden="true">
-                &times;
-              </span>
-            </button>
+            {showCloseButton && (
+              <button
+                className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                type="button"
+                aria-label="Close"
+                onClick={onClose}
+              >
+                <span className="text-xl leading-none font-bold" aria-hidden="true">
+                  &times;
+                </span>
+              </button>
+            )}
           </div>
         </header>
         {children}

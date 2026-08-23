@@ -55,7 +55,7 @@ export async function getExpenses(params = {}) {
 
     const { data: categoriesList } = await supabase
       .from("expense_categories")
-      .select("id, name")
+      .select("id, name, status, description")
       .order("name", { ascending: true });
 
     const page = Number(params.page) || 1;

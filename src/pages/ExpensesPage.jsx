@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   createExpense,
   exportExpenses,
@@ -24,8 +24,8 @@ import normalizeApiError from "../utils/normalizeApiError";
 const initialFilters = {
   search: "",
   category_id: "all",
-  status: "all",
   payment_method: "all",
+  status: "all",
   date_from: "",
   date_to: "",
   page: 1,
@@ -34,6 +34,7 @@ const initialFilters = {
 
 function ExpensesPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { can } = usePermissions();
   const canManage = can("expenses.manage");
   const alert = useAlert();
@@ -61,6 +62,58 @@ function ExpensesPage() {
   const [details, setDetails] = useState(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Sync URL routes with modal states
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === "/expenses/create" || path === "/expenses/new") {
+      setEditing(null);
+      setFormOpen(true);
+      setDetails(null);
+      setCategoriesOpen(false);
+    } else if (path === "/expenses/categories") {
+      setCategoriesOpen(true);
+      setFormOpen(false);
+      setDetails(null);
+    } else if (path.startsWith("/expenses/") && path.endsWith("/edit")) {
+      const editId = Number(path.split("/")[2]);
+      if (editId) {
+        getExpense(editId)
+          .then((res) => {
+            setEditing(res.expense || res);
+            setFormOpen(true);
+            setDetails(null);
+            setCategoriesOpen(false);
+          })
+          .catch(() => {
+            navigate("/expenses");
+          });
+      }
+    } else if (
+      path.startsWith("/expenses/") &&
+      !path.includes("/categories") &&
+      !path.includes("/create") &&
+      !path.includes("/new")
+    ) {
+      const viewId = Number(path.split("/")[2]);
+      if (viewId) {
+        getExpense(viewId)
+          .then((res) => {
+            setDetails(res.expense || res);
+            setFormOpen(false);
+            setCategoriesOpen(false);
+          })
+          .catch(() => {
+            navigate("/expenses");
+          });
+      }
+    } else if (path === "/expenses") {
+      setFormOpen(false);
+      setCategoriesOpen(false);
+      setEditing(null);
+      setDetails(null);
+    }
+  }, [location.pathname, navigate]);
 
   const loadData = useCallback(
     async (f, isRefresh = false) => {
@@ -156,6 +209,7 @@ function ExpensesPage() {
       }
       setFormOpen(false);
       setEditing(null);
+      navigate("/expenses");
       loadData(appliedFilters);
     } catch (e) {
       alert.error(normalizeApiError(e).message);
@@ -189,31 +243,14 @@ function ExpensesPage() {
             <Link to="/dashboard" className="hover:text-slate-700 transition">
               Dashboard
             </Link>
-            <span>›</span>
-            <span className="text-slate-600 font-bold">Expenses</span>
+            <span>/</span>
+            <span className="text-slate-700 font-bold">Expenses</span>
           </nav>
         </div>
 
-        {/* Right Actions: PDF, Excel, Refresh, Manage Categories, + Add Expense */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition cursor-pointer"
-            title="Export PDF"
-          >
-            <span className="text-xs font-black">📄</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => alert.success("Expenses exported to Excel.")}
-            className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
-            title="Export Excel"
-          >
-            <span className="text-xs font-black">📊</span>
-          </button>
-
+        {/* Top Header Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Refresh */}
           <button
             type="button"
             disabled={isRefreshing}
@@ -230,7 +267,7 @@ function ExpensesPage() {
           {/* Manage Categories */}
           <button
             type="button"
-            onClick={() => setCategoriesOpen(true)}
+            onClick={() => navigate("/expenses/categories")}
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
           >
             <Icon name="tag" className="size-3.5 text-slate-500" />
@@ -242,7 +279,7 @@ function ExpensesPage() {
             type="button"
             onClick={() => {
               setEditing(null);
-              setFormOpen(true);
+              navigate("/expenses/create");
             }}
             className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2.5 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 transition-all hover:bg-[#F38C2A] active:scale-95 cursor-pointer"
           >
@@ -467,7 +504,7 @@ function ExpensesPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setDetails(row)}
+                            onClick={() => navigate(`/expenses/${row.id}`)}
                             className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 hover:text-slate-700 transition cursor-pointer"
                             title="View Details"
                           >
@@ -478,10 +515,7 @@ function ExpensesPage() {
                             <>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setEditing(row);
-                                  setFormOpen(true);
-                                }}
+                                onClick={() => navigate(`/expenses/${row.id}/edit`)}
                                 className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-2xs hover:bg-slate-50 hover:text-slate-700 transition cursor-pointer"
                                 title="Edit Expense"
                               >
@@ -555,40 +589,38 @@ function ExpensesPage() {
       </section>
 
       {/* ADD / EDIT EXPENSE MODAL */}
-      <Modal
+      <ExpenseForm
         isOpen={formOpen}
-        title={editing ? "Edit Expense" : "Add New Expense"}
-        description="Record shop overheads, utilities, and daily petty expenses."
+        expense={editing}
+        categories={data.categories}
+        isSubmitting={isSubmitting}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);
+          navigate("/expenses");
         }}
-        size="md"
-      >
-        <ExpenseForm
-          categories={data.categories}
-          expense={editing}
-          isSubmitting={isSubmitting}
-          onCancel={() => {
-            setFormOpen(false);
-            setEditing(null);
-          }}
-          onSubmit={handleSaveExpense}
-        />
-      </Modal>
+        onSubmit={handleSaveExpense}
+        onOpenCategories={() => {
+          setFormOpen(false);
+          navigate("/expenses/categories");
+        }}
+      />
 
       {/* EXPENSE DETAILS MODAL */}
       <ExpenseDetailsModal
         isOpen={Boolean(details)}
         expense={details}
-        onClose={() => setDetails(null)}
+        onClose={() => {
+          setDetails(null);
+          navigate("/expenses");
+        }}
         onEdit={(exp) => {
           setDetails(null);
-          setEditing(exp);
-          setFormOpen(true);
+          navigate(`/expenses/${exp.id}/edit`);
         }}
         onVoid={(exp) => {
           setDetails(null);
+          navigate("/expenses");
           handleVoid(exp);
         }}
       />
@@ -598,6 +630,7 @@ function ExpensesPage() {
         isOpen={categoriesOpen}
         onClose={() => {
           setCategoriesOpen(false);
+          navigate("/expenses");
           loadData(appliedFilters);
         }}
       />

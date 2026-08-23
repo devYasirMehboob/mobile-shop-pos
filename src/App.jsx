@@ -129,6 +129,26 @@ function App() {
               element={permitted("expenses.view", <ExpensesPage />)}
             />
             <Route
+              path="expenses/create"
+              element={permitted("expenses.create", <ExpensesPage />)}
+            />
+            <Route
+              path="expenses/new"
+              element={permitted("expenses.create", <ExpensesPage />)}
+            />
+            <Route
+              path="expenses/:id"
+              element={permitted("expenses.view", <ExpensesPage />)}
+            />
+            <Route
+              path="expenses/:id/edit"
+              element={permitted("expenses.update", <ExpensesPage />)}
+            />
+            <Route
+              path="expenses/categories"
+              element={permitted("expenses.view", <ExpensesPage />)}
+            />
+            <Route
               path="reports"
               element={permitted("reports.view", <ReportsPage />)}
             />

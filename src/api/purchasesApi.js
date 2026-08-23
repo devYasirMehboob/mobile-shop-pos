@@ -86,7 +86,7 @@ export async function getPurchase(id) {
   if (isSupabaseConfigured()) {
     const { data: purchase, error: pErr } = await supabase
       .from("purchases")
-      .select("*, suppliers:supplier_id (name, phone, address, contact_person)")
+      .select("*, suppliers:supplier_id (name, phone, address, contact_person), access_credentials:created_by (name)")
       .eq("id", Number(id))
       .single();
     if (pErr) throw new Error(pErr.message);
@@ -102,12 +102,55 @@ export async function getPurchase(id) {
       .select("*")
       .eq("purchase_id", Number(id));
 
+    const { data: returns } = await supabase
+      .from("purchase_returns")
+      .select("*")
+      .eq("purchase_id", Number(id));
+
+    const computedItemsSubtotal = (items || []).reduce(
+      (s, it) =>
+        s +
+        (Number(it.line_total) ||
+          Number(it.quantity || 0) * Number(it.unit_cost || 0) -
+            Number(it.line_discount || 0)),
+      0
+    );
+
+    const subtotal = Number(purchase.subtotal) || computedItemsSubtotal;
+    const discount = Number(purchase.discount_amount || 0);
+    const tax = Number(purchase.tax_amount || 0);
+    const shipping = Number(purchase.shipping_amount || 0);
+    const other = Number(purchase.other_charges || 0);
+    const grandTotal =
+      Number(purchase.grand_total) ||
+      Math.max(0, subtotal - discount + tax + shipping + other);
+    const amountPaid = Number(purchase.amount_paid || 0);
+    const balanceDue = Math.max(0, grandTotal - amountPaid);
+
+    const firstPayment = (payments || [])[0];
+    const paymentRef = purchase.payment_reference || firstPayment?.reference_number || "";
+    const paymentMethod = purchase.payment_method || firstPayment?.payment_method || "cash";
+
     return {
       purchase: {
         ...purchase,
         supplier_name: purchase.suppliers?.name || "Supplier",
+        supplier_phone: purchase.suppliers?.phone || "",
+        supplier_address: purchase.suppliers?.address || "",
+        created_by_name: purchase.access_credentials?.name || "Admin",
+        payment_reference: paymentRef,
+        payment_method: paymentMethod,
+        subtotal,
+        discount_amount: discount,
+        tax_amount: tax,
+        shipping_amount: shipping,
+        other_charges: other,
+        grand_total: grandTotal,
+        amount_paid: amountPaid,
+        balance_due: balanceDue,
         items: items || [],
         payments: payments || [],
+        returns: returns || [],
       },
     };
   }
@@ -139,7 +182,7 @@ export async function createPurchase(values, draft = false) {
           supplier_invoice_number: values.supplier_invoice_number || null,
           purchase_date: values.purchase_date || now.toISOString().split("T")[0],
           subtotal: parseFloat(values.subtotal || grandTotal),
-          discount_amount: parseFloat(values.discount_amount || 0),
+          discount_amount: parseFloat(values.discount_amount || values.overall_discount || 0),
           tax_amount: parseFloat(values.tax_amount || 0),
           shipping_amount: parseFloat(values.shipping_amount || 0),
           other_charges: parseFloat(values.other_charges || 0),
@@ -160,21 +203,48 @@ export async function createPurchase(values, draft = false) {
     // Items insertion & inward stock increment
     const items = values.items || [];
     if (items.length > 0) {
-      const itemsToInsert = items.map((it) => ({
-        purchase_id: purchase.id,
-        product_id: Number(it.product_id || it.id),
-        product_name: it.product_name || it.name,
-        product_code: it.product_code || `PRD-${it.product_id || it.id}`,
-        quantity: parseFloat(it.quantity || 1),
-        unit_cost: parseFloat(it.unit_cost || it.purchase_cost || 0),
-        line_discount: parseFloat(it.line_discount || 0),
-        tax_amount: parseFloat(it.tax_amount || 0),
-        line_total:
-          parseFloat(it.line_total) ||
-          parseFloat(it.quantity || 1) * parseFloat(it.unit_cost || it.purchase_cost || 0),
-      }));
+      const itemsToInsert = [];
 
-      await supabase.from("purchase_items").insert(itemsToInsert);
+      for (const it of items) {
+        let pName = it.product_name || it.name;
+        let pCode = it.product_code;
+        const pId = Number(it.product_id || it.id);
+
+        if (!pName || !pCode) {
+          const { data: pRec } = await supabase
+            .from("products")
+            .select("name, product_code")
+            .eq("id", pId)
+            .maybeSingle();
+          if (pRec) {
+            pName = pName || pRec.name;
+            pCode = pCode || pRec.product_code;
+          }
+        }
+
+        const qty = parseFloat(it.quantity || 1);
+        const cost = parseFloat(it.unit_cost || it.purchase_cost || 0);
+        const discount = parseFloat(it.line_discount || 0);
+        const lineTot = Math.max(0, qty * cost - discount);
+
+        itemsToInsert.push({
+          purchase_id: purchase.id,
+          product_id: pId,
+          product_name: pName || `Product #${pId}`,
+          product_code: pCode || `PRD-${pId}`,
+          quantity: qty,
+          unit_cost: cost,
+          line_discount: discount,
+          tax_amount: parseFloat(it.tax_amount || 0),
+          line_total: lineTot,
+        });
+      }
+
+      const { error: itemsErr } = await supabase
+        .from("purchase_items")
+        .insert(itemsToInsert);
+
+      if (itemsErr) throw new Error(itemsErr.message);
 
       if (!draft) {
         for (const it of items) {
@@ -237,7 +307,13 @@ export async function createPurchase(values, draft = false) {
     return {
       success: true,
       message: "Purchase order created successfully.",
-      data: purchase,
+      data: {
+        ...purchase,
+        purchase,
+        id: purchase.id,
+      },
+      purchase,
+      id: purchase.id,
     };
   }
 
@@ -401,7 +477,31 @@ export async function createPurchaseReturn(values) {
     const timeStr = String(now.getTime()).slice(-4);
     const retNum = `PRET-${dateStr}-${timeStr}`;
 
-    const subtotal = parseFloat(values.subtotal || 0);
+    const purchaseId = Number(values.purchase_id);
+    let supplierId = Number(values.supplier_id);
+
+    // Fallback: Fetch supplier_id from purchases table if missing
+    if (!supplierId || isNaN(supplierId)) {
+      const { data: pRec } = await supabase
+        .from("purchases")
+        .select("id, supplier_id")
+        .eq("id", purchaseId)
+        .single();
+      if (pRec && pRec.supplier_id) {
+        supplierId = Number(pRec.supplier_id);
+      } else {
+        supplierId = 1;
+      }
+    }
+
+    const items = values.items || [];
+    let subtotal = parseFloat(values.subtotal || 0);
+    if (!subtotal || subtotal === 0) {
+      subtotal = items.reduce(
+        (acc, it) => acc + (Number(it.quantity || 0) * Number(it.unit_cost || 0)),
+        0
+      );
+    }
     const refundAmount = parseFloat(values.refund_amount || 0);
     const balanceAdj = parseFloat(values.balance_adjustment || 0);
 
@@ -410,8 +510,8 @@ export async function createPurchaseReturn(values) {
       .insert([
         {
           return_number: retNum,
-          purchase_id: Number(values.purchase_id),
-          supplier_id: Number(values.supplier_id),
+          purchase_id: purchaseId,
+          supplier_id: supplierId,
           return_date: values.return_date || now.toISOString().split("T")[0],
           subtotal,
           refund_amount: refundAmount,
@@ -426,37 +526,56 @@ export async function createPurchaseReturn(values) {
 
     if (error) throw new Error(error.message);
 
-    // If purchase items returned, reduce stock
-    const items = values.items || [];
+    // Process return items: reduce warehouse stock & update purchase_items record
     for (const it of items) {
       const prodId = Number(it.product_id || it.id);
       const retQty = parseFloat(it.quantity || 1);
 
-      const { data: prod } = await supabase
-        .from("products")
-        .select("id, quantity")
-        .eq("id", prodId)
-        .single();
+      // 1. Update purchase_items.returned_quantity if purchase_item_id is provided
+      if (it.purchase_item_id) {
+        const { data: curPi } = await supabase
+          .from("purchase_items")
+          .select("id, returned_quantity, quantity")
+          .eq("id", Number(it.purchase_item_id))
+          .single();
 
-      if (prod) {
-        const prev = Number(prod.quantity || 0);
-        const next = Math.max(0, prev - retQty);
+        if (curPi) {
+          const currentReturned = Number(curPi.returned_quantity || 0);
+          await supabase
+            .from("purchase_items")
+            .update({ returned_quantity: currentReturned + retQty })
+            .eq("id", curPi.id);
+        }
+      }
 
-        await supabase.from("products").update({ quantity: next }).eq("id", prodId);
+      // 2. Reduce on-hand inventory
+      if (prodId) {
+        const { data: prod } = await supabase
+          .from("products")
+          .select("id, quantity")
+          .eq("id", prodId)
+          .single();
 
-        await supabase.from("stock_transactions").insert([
-          {
-            product_id: prodId,
-            user_id: values.processed_by || 1,
-            transaction_type: "manual_reduction",
-            quantity: -retQty,
-            previous_stock: prev,
-            new_stock: next,
-            reason: `Returned to Supplier — Return #${retNum}`,
-            reference_type: "purchase_return",
-            reference_id: ret.id,
-          },
-        ]);
+        if (prod) {
+          const prev = Number(prod.quantity || 0);
+          const next = Math.max(0, prev - retQty);
+
+          await supabase.from("products").update({ quantity: next }).eq("id", prodId);
+
+          await supabase.from("stock_transactions").insert([
+            {
+              product_id: prodId,
+              user_id: values.processed_by || 1,
+              transaction_type: "manual_reduction",
+              quantity: -retQty,
+              previous_stock: prev,
+              new_stock: next,
+              reason: `Returned to Supplier — Return #${retNum}`,
+              reference_type: "purchase_return",
+              reference_id: ret.id,
+            },
+          ]);
+        }
       }
     }
 

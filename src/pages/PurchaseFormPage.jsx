@@ -126,26 +126,50 @@ function PurchaseFormPage() {
   }, [id, alert]);
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce(
-      (s, i) =>
-        s +
-        Math.max(
-          0,
-          Number(i.quantity || 0) * Number(i.unit_cost || 0) -
-            Number(i.line_discount || 0)
-        ),
+    // 1. Gross items subtotal (before any line discounts)
+    const grossSubtotal = items.reduce(
+      (s, i) => s + Number(i.quantity || 0) * Number(i.unit_cost || 0),
       0
     );
-    const discount = Number(form.overall_discount || 0);
+
+    // 2. Total line items discount
+    const itemsDiscount = items.reduce(
+      (s, i) => s + Number(i.line_discount || 0),
+      0
+    );
+
+    // 3. Net items subtotal after line discounts
+    const netItemsSubtotal = Math.max(0, grossSubtotal - itemsDiscount);
+
+    // 4. Overall invoice discount
+    const overallDiscount = Number(form.overall_discount || 0);
+
+    // 5. Total combined discount
+    const totalDiscount = itemsDiscount + overallDiscount;
+
+    // 6. Tax and additional charges
     const tax = Number(form.tax || 0);
-    const charges =
-      Number(form.shipping_amount || 0) + Number(form.other_charges || 0);
+    const shipping = Number(form.shipping_amount || 0);
+    const otherCharges = Number(form.other_charges || 0);
+    const charges = shipping + otherCharges;
+
+    // 7. Net Grand total payable
+    const grand = Math.max(0, grossSubtotal - totalDiscount + tax + charges);
+
     return {
-      subtotal,
-      discount,
+      grossSubtotal,
+      itemsDiscount,
+      netItemsSubtotal,
+      subtotal: grossSubtotal,
+      overallDiscount,
+      discount: overallDiscount,
+      totalDiscount,
       tax,
+      shipping,
+      otherCharges,
       charges,
-      grand: Math.max(0, subtotal - discount + tax + charges),
+      grand,
+      totalQuantity: items.reduce((s, i) => s + Number(i.quantity || 0), 0),
     };
   }, [items, form]);
 
@@ -273,9 +297,18 @@ function PurchaseFormPage() {
     return {
       ...form,
       supplier_id: Number(form.supplier_id),
+      subtotal: totals.grossSubtotal || totals.subtotal,
+      discount_amount: form.overall_discount || 0,
+      tax_amount: form.tax || 0,
+      shipping_amount: form.shipping_amount || 0,
+      other_charges: form.other_charges || 0,
+      grand_total: totals.grand,
       items: items.map(
         ({
           product_id,
+          name,
+          product_name,
+          product_code,
           unit_id,
           quantity,
           unit_cost,
@@ -285,6 +318,9 @@ function PurchaseFormPage() {
           expiry_date,
         }) => ({
           product_id: Number(product_id),
+          product_name: name || product_name,
+          name: name || product_name,
+          product_code: product_code,
           unit_id: unit_id ? Number(unit_id) : null,
           quantity: quantity,
           unit_cost: unit_cost,
@@ -338,7 +374,7 @@ function PurchaseFormPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-24">
+    <div className="mx-auto max-w-7xl space-y-6 pb-6">
       {/* 1. Header Toolbar */}
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
@@ -473,10 +509,10 @@ function PurchaseFormPage() {
       />
 
       {/* 5. Additional Costs & Split Totals Panel */}
-      <PurchaseTotalsPanel values={form} totals={totals} onChange={change} />
+      <PurchaseTotalsPanel values={form} items={items} totals={totals} onChange={change} />
 
       {/* 6. Sticky Floating Bottom Action Bar */}
-      <footer className="fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-7xl rounded-2xl border border-slate-200/90 bg-white/95 p-3.5 sm:p-4 shadow-[0_12px_40px_rgba(15,23,42,0.14)] backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
+      <footer className="sticky bottom-4 z-30 mt-6 w-full rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-[0_12px_36px_rgba(15,23,42,0.12)] backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div>
             <span className="text-[10px] font-extrabold uppercase text-slate-400">

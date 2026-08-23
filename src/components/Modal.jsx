@@ -1,6 +1,14 @@
 import { useEffect } from "react";
 
-function Modal({ isOpen, title, description, onClose, children, size = "md" }) {
+function Modal({
+  isOpen,
+  title,
+  description,
+  onClose,
+  children,
+  size = "md",
+  headerActions = null,
+}) {
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -46,30 +54,33 @@ function Modal({ isOpen, title, description, onClose, children, size = "md" }) {
         aria-modal="true"
         aria-labelledby="modal-title"
       >
-        <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+        <header className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div className="min-w-0 flex-1">
             <h2
               id="modal-title"
-              className="text-lg font-black text-[#0B1E38] tracking-tight"
+              className="text-base sm:text-lg font-black text-[#0B1E38] tracking-tight truncate"
             >
               {title}
             </h2>
             {description && (
-              <p className="mt-0.5 text-xs text-slate-400 font-medium">
+              <p className="mt-0.5 text-xs text-slate-400 font-medium truncate">
                 {description}
               </p>
             )}
           </div>
-          <button
-            className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            <span className="text-xl leading-none font-bold" aria-hidden="true">
-              &times;
-            </span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {headerActions}
+            <button
+              className="grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              <span className="text-xl leading-none font-bold" aria-hidden="true">
+                &times;
+              </span>
+            </button>
+          </div>
         </header>
         {children}
       </section>

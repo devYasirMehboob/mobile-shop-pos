@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import Modal from "../Modal";
 import LoadingState from "../LoadingState";
-import { formatCurrency, formatDateTime } from "../../utils/calculateSaleTotals";
+import {
+  formatCurrency,
+  formatDateTime,
+} from "../../utils/calculateSaleTotals";
 import useSettings from "../../hooks/useSettings";
 import useAlert from "../../hooks/useAlert";
+import { exportReceiptToPdf } from "../../utils/pdfExport";
 
 const shopImageUrl = (url) => {
   if (!url) return "";
@@ -22,14 +26,21 @@ function ReceiptPreview({
   const alert = useAlert();
   const options = receipt?.options || settings?.receipt || {};
   const shop = receipt?.shop || settings?.shop || {};
-  const logo = shop.logo || shop.logo_url || settings?.shop?.logo || settings?.shop?.logo_url;
+  const logo =
+    shop.logo ||
+    shop.logo_url ||
+    settings?.shop?.logo ||
+    settings?.shop?.logo_url;
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const sale = receipt?.sale || {};
   const items = Array.isArray(sale.items) ? sale.items : [];
   const totalQty = items.reduce(
-    (acc, i) => acc + (parseFloat(i.quantity_entered || i.quantity || i.cartQuantity) || 1),
-    0
+    (acc, i) =>
+      acc +
+      (parseFloat(i.quantity_entered || i.quantity || i.cartQuantity) || 1),
+    0,
   );
 
   const handlePrint = async () => {
@@ -38,7 +49,9 @@ function ReceiptPreview({
     if (printingMethod === "qz") {
       const printerName = settings?.printer?.printer_name;
       if (!printerName) {
-        alert.error("Receipt printer name is not configured in settings. Please configure it in Settings > Printer.");
+        alert.error(
+          "Receipt printer name is not configured in settings. Please configure it in Settings > Printer.",
+        );
         return;
       }
 
@@ -73,12 +86,33 @@ function ReceiptPreview({
         const { printHtmlViaQZ } = await import("../../utils/qzService");
         await printHtmlViaQZ(printerName, fullHtml);
       } catch (err) {
-        alert.error("Failed to print via QZ Tray: " + (err.message || "Unknown error"));
+        alert.error(
+          "Failed to print via QZ Tray: " + (err.message || "Unknown error"),
+        );
       } finally {
         setIsPrinting(false);
       }
     } else {
       window.print();
+    }
+  };
+
+  const handleSavePdf = async () => {
+    try {
+      setIsExportingPdf(true);
+      await exportReceiptToPdf(
+        receipt,
+        sale.invoice_number ||
+          receipt?.invoice_number ||
+          `Receipt-${sale.id || "Sale"}`,
+      );
+      alert.success("Receipt PDF downloaded successfully.");
+    } catch (err) {
+      alert.error(
+        "Failed to generate PDF: " + (err.message || "Unknown error"),
+      );
+    } finally {
+      setIsExportingPdf(false);
     }
   };
 
@@ -96,6 +130,26 @@ function ReceiptPreview({
       description={`80mm Thermal Receipt • ${sale.invoice_number || receipt?.invoice_number || ""}`}
       onClose={onClose}
       size="sm"
+      headerActions={
+        <div className="no-print flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSavePdf}
+            disabled={isPrinting || isExportingPdf}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-slate-100/90 px-3 py-1.5 text-xs font-black text-slate-800 shadow-2xs hover:bg-slate-200 transition cursor-pointer disabled:opacity-50"
+          >
+            <span>{isExportingPdf ? "Downloading..." : "📥 Download"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            disabled={isPrinting || isExportingPdf}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-3.5 py-1.5 text-xs font-black text-white shadow-md shadow-orange-500/20 hover:bg-[#F38C2A] transition cursor-pointer disabled:opacity-50"
+          >
+            <span>🖨️ {isPrinting ? "Printing..." : "Print"}</span>
+          </button>
+        </div>
+      }
     >
       {isLoading ? (
         <div className="py-12">
@@ -103,7 +157,7 @@ function ReceiptPreview({
         </div>
       ) : (
         receipt && (
-          <div className="p-4 sm:p-5">
+          <div className="max-h-[80vh] overflow-y-auto p-4 sm:p-5 scrollbar-thin">
             {/* Printable Receipt Paper Canvas */}
             <article
               id="printable-receipt"
@@ -121,7 +175,9 @@ function ReceiptPreview({
 
               {/* 1. SHOP HEADER & LOGO */}
               <header className="text-center space-y-1">
-                {(receipt.is_offline || receipt.offline_watermark || sale.is_offline) && (
+                {(receipt.is_offline ||
+                  receipt.offline_watermark ||
+                  sale.is_offline) && (
                   <div className="mb-2 rounded border border-dashed border-red-500 bg-red-50 p-1 text-center text-[10px] font-black text-red-700 uppercase tracking-widest">
                     *** Offline Sale — Pending Sync ***
                   </div>
@@ -169,30 +225,37 @@ function ReceiptPreview({
                 <div className="flex justify-between items-center font-bold">
                   <span className="text-slate-600">INVOICE:</span>
                   <span className="font-mono text-black text-xs font-black">
-                    {sale.invoice_number || receipt.invoice_number || `INV-${sale.id}`}
+                    {sale.invoice_number ||
+                      receipt.invoice_number ||
+                      `INV-${sale.id}`}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Date:</span>
                   <span className="font-mono text-slate-900">
-                    {formatDateTime(sale.created_at || new Date().toISOString())}
+                    {formatDateTime(
+                      sale.created_at || new Date().toISOString(),
+                    )}
                   </span>
                 </div>
                 {options.show_cashier !== false && sale.cashier_name && (
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500">Cashier:</span>
-                    <span className="font-semibold text-slate-900">{sale.cashier_name}</span>
-                  </div>
-                )}
-                {options.show_customer !== false && (sale.customer_name || sale.customer_phone) && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Customer:</span>
-                    <span className="font-semibold text-slate-900 truncate max-w-[170px]">
-                      {sale.customer_name || "Walk-in Customer"}
-                      {sale.customer_phone ? ` (${sale.customer_phone})` : ""}
+                    <span className="font-semibold text-slate-900">
+                      {sale.cashier_name}
                     </span>
                   </div>
                 )}
+                {options.show_customer !== false &&
+                  (sale.customer_name || sale.customer_phone) && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">Customer:</span>
+                      <span className="font-semibold text-slate-900 truncate max-w-[170px]">
+                        {sale.customer_name || "Walk-in Customer"}
+                        {sale.customer_phone ? ` (${sale.customer_phone})` : ""}
+                      </span>
+                    </div>
+                  )}
               </div>
 
               {/* Status Banner (if not completed) */}
@@ -217,9 +280,18 @@ function ReceiptPreview({
                 </thead>
                 <tbody className="divide-y divide-slate-200/60 divide-dashed font-medium">
                   {items.map((item, idx) => {
-                    const qty = parseFloat(item.quantity_entered || item.quantity || item.cartQuantity) || 1;
-                    const price = parseFloat(item.unit_price || item.selling_price || item.price) || 0;
-                    const lineTotal = parseFloat(item.line_total) || qty * price;
+                    const qty =
+                      parseFloat(
+                        item.quantity_entered ||
+                          item.quantity ||
+                          item.cartQuantity,
+                      ) || 1;
+                    const price =
+                      parseFloat(
+                        item.unit_price || item.selling_price || item.price,
+                      ) || 0;
+                    const lineTotal =
+                      parseFloat(item.line_total) || qty * price;
 
                     return (
                       <tr key={item.id || idx} className="align-top">
@@ -255,22 +327,27 @@ function ReceiptPreview({
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between items-center text-slate-700">
                   <span>Subtotal:</span>
-                  <span className="font-mono font-bold">{formatCurrency(sale.subtotal)}</span>
+                  <span className="font-mono font-bold">
+                    {formatCurrency(sale.subtotal)}
+                  </span>
                 </div>
 
-                {options.show_discount !== false && Number(sale.discount_amount) > 0 && (
-                  <div className="flex justify-between items-center text-slate-700">
-                    <span>Discount:</span>
-                    <span className="font-mono text-rose-600 font-bold">
-                      -{formatCurrency(sale.discount_amount)}
-                    </span>
-                  </div>
-                )}
+                {options.show_discount !== false &&
+                  Number(sale.discount_amount) > 0 && (
+                    <div className="flex justify-between items-center text-slate-700">
+                      <span>Discount:</span>
+                      <span className="font-mono text-rose-600 font-bold">
+                        -{formatCurrency(sale.discount_amount)}
+                      </span>
+                    </div>
+                  )}
 
                 {options.show_tax !== false && Number(sale.tax_amount) > 0 && (
                   <div className="flex justify-between items-center text-slate-700">
                     <span>{options.tax_name || "Tax (GST)"}:</span>
-                    <span className="font-mono font-bold">{formatCurrency(sale.tax_amount)}</span>
+                    <span className="font-mono font-bold">
+                      {formatCurrency(sale.tax_amount)}
+                    </span>
                   </div>
                 )}
 
@@ -323,7 +400,8 @@ function ReceiptPreview({
               {/* 5. FOOTER MESSAGES & BARCODE */}
               <footer className="text-center space-y-1.5 pt-0.5">
                 <p className="text-[11px] font-bold text-slate-900">
-                  {shop.receipt_footer || "Thank you for shopping with us! Please visit again."}
+                  {shop.receipt_footer ||
+                    "Thank you for shopping with us! Please visit again."}
                 </p>
 
                 {shop.return_policy && (
@@ -333,26 +411,6 @@ function ReceiptPreview({
                 )}
               </footer>
             </article>
-
-            {/* Modal Actions */}
-            <div className="no-print mt-5 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isPrinting}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-extrabold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handlePrint}
-                disabled={isPrinting}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#FF9F43] px-5 py-2.5 text-xs font-black text-white shadow-md shadow-orange-500/20 hover:bg-[#F38C2A] transition cursor-pointer disabled:opacity-50"
-              >
-                <span>🖨️ {isPrinting ? "Printing..." : "Print / Reprint (80mm)"}</span>
-              </button>
-            </div>
           </div>
         )
       )}

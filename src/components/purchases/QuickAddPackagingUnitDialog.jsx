@@ -3,7 +3,14 @@ import { saveProductPackagingUnit } from "../../api/purchasesApi";
 import normalizeApiError from "../../utils/normalizeApiError";
 import Icon from "../Icon";
 
-function QuickAddPackagingUnitDialog({ isOpen, onClose, product, currentItem, units = [], onConfigured }) {
+function QuickAddPackagingUnitDialog({
+  isOpen,
+  onClose,
+  product,
+  currentItem,
+  units = [],
+  onConfigured,
+}) {
   const [form, setForm] = useState({
     unit_id: "",
     conversion_to_base: "1",
@@ -16,26 +23,20 @@ function QuickAddPackagingUnitDialog({ isOpen, onClose, product, currentItem, un
 
   useEffect(() => {
     if (isOpen && product) {
-      // The currently selected unit_id in the purchase row
       const activeUnitId = currentItem?.unit_id ? String(currentItem.unit_id) : "";
+      const purchaseUnits =
+        currentItem?.purchase_units || product?.purchase_units || [];
 
-      // All configured units for this product (from product_units table)
-      const purchaseUnits = currentItem?.purchase_units || product?.purchase_units || [];
-
-      // Find existing configuration for the currently selected unit
       const existingUnit = activeUnitId
         ? purchaseUnits.find((u) => String(u.unit_id) === activeUnitId)
         : null;
 
       setForm({
-        // Pre-select the current unit, else first unit in global list
         unit_id: activeUnitId || (units[0]?.id ? String(units[0].id) : ""),
-        // Restore saved conversion factor (e.g. 50) — NOT hardcoded 1
         conversion_to_base: existingUnit
           ? String(existingUnit.conversion_to_base)
           : "1",
         is_purchase_unit: true,
-        // Restore saved cost if available
         purchase_cost: existingUnit?.purchase_cost
           ? String(existingUnit.purchase_cost)
           : String(product.purchase_cost || ""),
@@ -72,18 +73,19 @@ function QuickAddPackagingUnitDialog({ isOpen, onClose, product, currentItem, un
   const selectedUnitObj = units.find((u) => String(u.id) === String(form.unit_id));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
-        <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <div className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4.5 bg-slate-50/50">
+          <div className="flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs border border-emerald-100/60">
               <Icon name="box" className="size-5" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold text-slate-900">
+              <h3 className="text-sm font-black text-[#0B1E38] tracking-tight">
                 Configure Packaging Unit
               </h3>
-              <p className="text-xs text-slate-500 truncate max-w-[250px]">
+              <p className="text-xs text-slate-400 font-medium truncate max-w-[220px]">
                 {product.name}
               </p>
             </div>
@@ -91,28 +93,30 @@ function QuickAddPackagingUnitDialog({ isOpen, onClose, product, currentItem, un
           <button
             type="button"
             onClick={onClose}
-            className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="grid size-8 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
           >
-            ✕
+            <span className="text-lg font-bold">✕</span>
           </button>
         </header>
 
+        {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-600">
-              {error}
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-bold text-rose-700 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{error}</span>
             </div>
           )}
 
           <label className="block text-xs font-bold text-slate-700">
-            Packaging Unit (e.g. Bori, Carton, Box)
+            Packaging Unit (e.g. Bori, Carton, Box, Dozen)
             <select
               required
               value={form.unit_id}
               onChange={(e) => setForm((p) => ({ ...p, unit_id: e.target.value }))}
-              className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-500"
+              className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
             >
-              <option value="">Select Packaging Unit</option>
+              <option value="">Select Packaging Unit...</option>
               {units.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} ({u.symbol})
@@ -122,19 +126,19 @@ function QuickAddPackagingUnitDialog({ isOpen, onClose, product, currentItem, un
           </label>
 
           <label className="block text-xs font-bold text-slate-700">
-            Conversion Factor (How many base units in 1 {selectedUnitObj?.name || "pack"}?)
+            Conversion Factor (Base Units per 1 {selectedUnitObj?.name || "Pack"})
             <input
               required
               type="number"
-              step="0.001"
+              step="any"
               min="0.001"
               value={form.conversion_to_base}
               onChange={(e) => setForm((p) => ({ ...p, conversion_to_base: e.target.value }))}
               placeholder="e.g. 50 (if 1 Bori = 50 kg)"
-              className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-500"
+              className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-mono font-bold text-slate-900 outline-none transition focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
             />
-            <p className="mt-1 text-[11px] font-medium text-slate-400">
-              Example: If 1 {selectedUnitObj?.name || "Bori"} contains 50 {product.base_unit_symbol || "kg"}, enter <strong>50</strong>.
+            <p className="mt-1.5 text-[11px] font-medium text-slate-400">
+              Example: If 1 {selectedUnitObj?.name || "Box"} contains 12 {product.base_unit_symbol || "pcs"}, enter <strong>12</strong>.
             </p>
           </label>
 
@@ -147,24 +151,25 @@ function QuickAddPackagingUnitDialog({ isOpen, onClose, product, currentItem, un
               value={form.purchase_cost}
               onChange={(e) => setForm((p) => ({ ...p, purchase_cost: e.target.value }))}
               placeholder="e.g. 6900"
-              className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-500"
+              className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-mono font-bold text-slate-900 outline-none transition focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
             />
           </label>
 
-          <footer className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+          <footer className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-700"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white shadow-md shadow-emerald-500/20 hover:bg-emerald-700 transition cursor-pointer disabled:opacity-50"
             >
-              {loading ? "Saving Unit..." : "Save Packaging Unit"}
+              <Icon name="check" className="size-4" />
+              <span>{loading ? "Saving Unit..." : "Save Packaging Unit"}</span>
             </button>
           </footer>
         </form>

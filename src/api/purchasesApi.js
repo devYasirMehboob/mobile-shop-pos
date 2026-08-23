@@ -590,15 +590,23 @@ export async function getPurchaseProducts(params = {}) {
 
 export async function quickAddPurchaseProduct(payload) {
   if (isSupabaseConfigured()) {
-    const code = payload.product_code || `PRD-${Date.now().toString().slice(-6)}`;
-    const barcode = payload.barcode || code;
+    const code =
+      payload.product_code?.trim() ||
+      `PRD-${Date.now().toString().slice(-6)}`;
+    const barcode = payload.barcode?.trim() || null;
+
+    let categoryId = payload.category_id ? Number(payload.category_id) : null;
+    if (!categoryId) {
+      const { data: firstCat } = await supabase.from("categories").select("id").limit(1).maybeSingle();
+      if (firstCat) categoryId = firstCat.id;
+    }
 
     const { data: newProd, error } = await supabase
       .from("products")
       .insert([
         {
           name: payload.name.trim(),
-          category_id: payload.category_id ? Number(payload.category_id) : null,
+          category_id: categoryId,
           product_code: code,
           barcode: barcode,
           purchase_cost: parseFloat(payload.purchase_cost || 0),
@@ -608,7 +616,12 @@ export async function quickAddPurchaseProduct(payload) {
           base_unit_id: payload.base_unit_id ? Number(payload.base_unit_id) : null,
           default_purchase_unit_id: payload.default_purchase_unit_id
             ? Number(payload.default_purchase_unit_id)
+            : payload.base_unit_id
+            ? Number(payload.base_unit_id)
             : null,
+          track_stock: payload.track_stock === false ? 0 : 1,
+          track_batches: payload.track_batches ? 1 : 0,
+          track_expiry: payload.track_expiry ? 1 : 0,
           status: "active",
         },
       ])
@@ -617,12 +630,30 @@ export async function quickAddPurchaseProduct(payload) {
 
     if (error) throw new Error(error.message);
 
+    // If unit is configured, create default packaging unit
+    const unitId = payload.default_purchase_unit_id || payload.base_unit_id;
+    if (unitId && newProd?.id) {
+      try {
+        await supabase.from("packaging_units").insert([
+          {
+            product_id: newProd.id,
+            unit_id: Number(unitId),
+            conversion_to_base: 1.0,
+            purchase_cost: parseFloat(payload.purchase_cost || 0),
+          },
+        ]);
+      } catch {
+        // Packaging unit insert is non-fatal
+      }
+    }
+
     return {
       product: {
         ...newProd,
         category_name: newProd.categories?.name || "",
         unit_cost: Number(newProd.purchase_cost || 0),
         purchase_cost: Number(newProd.purchase_cost || 0),
+        selling_price: Number(newProd.selling_price || 0),
       },
     };
   }

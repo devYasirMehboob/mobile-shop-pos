@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import apiClient from "../../api/apiClient";
+import { quickAddPurchaseProduct } from "../../api/purchasesApi";
 import normalizeApiError from "../../utils/normalizeApiError";
 import Icon from "../Icon";
 
@@ -58,8 +58,8 @@ function QuickAddProductDialog({ isOpen, onClose, onCreated, supplierId, initial
         selling_price: String(form.selling_price || "0"),
       };
 
-      const res = await apiClient.post("/purchases/quick-add-product", payload);
-      const createdProduct = res.data?.data?.product;
+      const res = await quickAddPurchaseProduct(payload);
+      const createdProduct = res.product || res.data?.product;
       if (createdProduct) {
         onCreated(createdProduct);
         onClose();

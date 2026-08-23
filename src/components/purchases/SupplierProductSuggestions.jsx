@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import apiClient from "../../api/apiClient";
+import { getSupplierSuggestions } from "../../api/suppliersApi";
 import { formatCurrency } from "../../utils/calculateSaleTotals";
 import Icon from "../Icon";
 
@@ -14,10 +14,9 @@ function SupplierProductSuggestions({ supplierId, onSelectProduct }) {
     }
 
     setLoading(true);
-    apiClient
-      .get(`/suppliers/${supplierId}/purchase-suggestions`)
+    getSupplierSuggestions(supplierId)
       .then((res) => {
-        setSuggestions(res.data?.data?.suggestions || []);
+        setSuggestions(res.suggestions || res.data?.suggestions || []);
       })
       .catch(() => setSuggestions([]))
       .finally(() => setLoading(false));

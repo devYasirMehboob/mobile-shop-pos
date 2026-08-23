@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import apiClient from "../../api/apiClient";
+import { saveProductPackagingUnit } from "../../api/purchasesApi";
 import normalizeApiError from "../../utils/normalizeApiError";
 import Icon from "../Icon";
 
@@ -59,7 +59,7 @@ function QuickAddPackagingUnitDialog({ isOpen, onClose, product, currentItem, un
         purchase_cost: form.purchase_cost ? String(form.purchase_cost) : null,
       };
 
-      await apiClient.post(`/products/${product.id}/units`, payload);
+      await saveProductPackagingUnit(product.id, payload);
       onConfigured(product.id);
       onClose();
     } catch (err) {

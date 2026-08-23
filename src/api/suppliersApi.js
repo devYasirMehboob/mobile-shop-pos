@@ -240,3 +240,61 @@ export async function getSupplierStatement(id, params = {}) {
 
   return data(await apiClient.get(`/suppliers/${id}/statement`, { params }));
 }
+
+export async function getSupplierSuggestions(supplierId) {
+  if (isSupabaseConfigured()) {
+    const sId = Number(supplierId);
+    try {
+      const { data: pastPurchases } = await supabase
+        .from("purchases")
+        .select("id")
+        .eq("supplier_id", sId)
+        .limit(10);
+
+      const purchaseIds = (pastPurchases || []).map((p) => p.id);
+      if (purchaseIds.length > 0) {
+        const { data: items } = await supabase
+          .from("purchase_items")
+          .select("product_id, product_name, unit_cost")
+          .in("purchase_id", purchaseIds)
+          .limit(20);
+
+        const seen = new Set();
+        const suggestions = [];
+        for (const it of items || []) {
+          if (!seen.has(it.product_id)) {
+            seen.add(it.product_id);
+            suggestions.push({
+              id: it.product_id,
+              name: it.product_name,
+              last_purchase_cost: it.unit_cost,
+            });
+          }
+        }
+        if (suggestions.length > 0) {
+          return { suggestions };
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    const { data: prods } = await supabase
+      .from("products")
+      .select("id, name, purchase_cost")
+      .eq("status", "active")
+      .limit(6);
+
+    return {
+      suggestions: (prods || []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        last_purchase_cost: p.purchase_cost,
+      })),
+    };
+  }
+
+  const res = await apiClient.get(`/suppliers/${supplierId}/purchase-suggestions`);
+  return res.data?.data || res.data;
+}
+

@@ -552,3 +552,135 @@ export async function exportPurchases(params = {}) {
   return apiClient.get("/purchases/export", { params, responseType: "blob" });
 }
 
+export async function getPurchaseProducts(params = {}) {
+  if (isSupabaseConfigured()) {
+    let query = supabase
+      .from("products")
+      .select("*, categories:category_id (name)")
+      .eq("status", "active")
+      .order("name", { ascending: true })
+      .limit(params.limit || 30);
+
+    if (params.search) {
+      const s = params.search.trim();
+      query = query.or(
+        `name.ilike.%${s}%,product_code.ilike.%${s}%,barcode.ilike.%${s}%`
+      );
+    }
+
+    const { data: prods, error } = await query;
+    if (error) throw new Error(error.message);
+
+    const formatted = (prods || []).map((p) => ({
+      ...p,
+      category_name: p.categories?.name || "",
+      unit_cost: Number(p.purchase_cost || 0),
+      purchase_cost: Number(p.purchase_cost || 0),
+      selling_price: Number(p.selling_price || p.price || 0),
+    }));
+
+    return {
+      products: formatted,
+    };
+  }
+
+  const response = await apiClient.get("/purchase-products", { params });
+  return response.data?.data || response.data;
+}
+
+export async function quickAddPurchaseProduct(payload) {
+  if (isSupabaseConfigured()) {
+    const code = payload.product_code || `PRD-${Date.now().toString().slice(-6)}`;
+    const barcode = payload.barcode || code;
+
+    const { data: newProd, error } = await supabase
+      .from("products")
+      .insert([
+        {
+          name: payload.name.trim(),
+          category_id: payload.category_id ? Number(payload.category_id) : null,
+          product_code: code,
+          barcode: barcode,
+          purchase_cost: parseFloat(payload.purchase_cost || 0),
+          selling_price: parseFloat(payload.selling_price || 0),
+          quantity: parseFloat(payload.quantity || 0),
+          minimum_stock: parseFloat(payload.minimum_stock || 10),
+          base_unit_id: payload.base_unit_id ? Number(payload.base_unit_id) : null,
+          default_purchase_unit_id: payload.default_purchase_unit_id
+            ? Number(payload.default_purchase_unit_id)
+            : null,
+          status: "active",
+        },
+      ])
+      .select("*, categories:category_id (name)")
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    return {
+      product: {
+        ...newProd,
+        category_name: newProd.categories?.name || "",
+        unit_cost: Number(newProd.purchase_cost || 0),
+        purchase_cost: Number(newProd.purchase_cost || 0),
+      },
+    };
+  }
+
+  const response = await apiClient.post("/purchases/quick-add-product", payload);
+  return response.data?.data || response.data;
+}
+
+export async function getProductUnits(productId) {
+  if (isSupabaseConfigured()) {
+    try {
+      const { data: units, error } = await supabase
+        .from("packaging_units")
+        .select("*, units:unit_id (name, symbol)")
+        .eq("product_id", Number(productId));
+
+      if (!error && units) {
+        return (units || []).map((u) => ({
+          ...u,
+          name: u.units?.name || "Unit",
+          symbol: u.units?.symbol || "pcs",
+        }));
+      }
+    } catch {
+      // Return empty if packaging_units table doesn't exist
+    }
+    return [];
+  }
+
+  const response = await apiClient.get(`/products/${productId}/units`);
+  return response.data?.data || response.data;
+}
+
+export async function saveProductPackagingUnit(productId, payload) {
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase
+        .from("packaging_units")
+        .insert([
+          {
+            product_id: Number(productId),
+            unit_id: Number(payload.unit_id),
+            conversion_to_base: parseFloat(payload.conversion_to_base || 1),
+            purchase_cost: parseFloat(payload.purchase_cost || 0),
+          },
+        ])
+        .select()
+        .single();
+
+      if (!error) return data;
+    } catch {
+      // Graceful fallback
+    }
+    return { success: true };
+  }
+
+  const response = await apiClient.post(`/products/${productId}/units`, payload);
+  return response.data?.data || response.data;
+}
+
+

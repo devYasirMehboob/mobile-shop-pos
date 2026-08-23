@@ -6,6 +6,7 @@ import { getProducts } from "../api/productsApi";
 import {
   completeDraftPurchase,
   createPurchase,
+  getProductUnits,
   getPurchase,
   updateDraftPurchase,
 } from "../api/purchasesApi";
@@ -209,11 +210,11 @@ function PurchaseFormPage() {
     try {
       // Refresh product units for this specific product
       const [unitsRes, productsRes] = await Promise.all([
-        apiClient.get(`/products/${productId}/units`),
+        getProductUnits(productId),
         getProducts({ status: "active", limit: 300 }),
       ]);
 
-      const freshUnits = unitsRes.data?.data || unitsRes.data || [];
+      const freshUnits = Array.isArray(unitsRes) ? unitsRes : unitsRes?.units || [];
       const freshProducts = productsRes.products || [];
 
       setProducts(freshProducts);
@@ -279,8 +280,8 @@ function PurchaseFormPage() {
           : await completeDraftPurchase(id, payload())
         : await createPurchase(payload(), draft);
 
-      alert.success(r.message || "Purchase saved successfully.");
-      navigate(draft ? "/purchases" : `/purchases/${r.data.purchase.id}`, {
+      const targetId = r.data?.purchase?.id || r.data?.id || r.purchase?.id || r.id;
+      navigate(draft || !targetId ? "/purchases" : `/purchases/${targetId}`, {
         replace: true,
       });
     } catch (e) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import apiClient from "../../api/apiClient";
+import { getPurchaseProducts } from "../../api/purchasesApi";
 import normalizeApiError from "../../utils/normalizeApiError";
 import { formatCurrency } from "../../utils/calculateSaleTotals";
 import Icon from "../Icon";
@@ -32,16 +32,13 @@ function PurchaseProductCombobox({ supplierId, onSelectProduct, onQuickAdd }) {
     setError("");
 
     const timer = setTimeout(() => {
-      apiClient
-        .get("/purchase-products", {
-          params: {
-            search: query.trim(),
-            supplier_id: supplierId || "",
-            limit: 25,
-          },
-        })
+      getPurchaseProducts({
+        search: query.trim(),
+        supplier_id: supplierId || "",
+        limit: 25,
+      })
         .then((res) => {
-          const list = res.data?.data?.products || [];
+          const list = res.products || res.data?.products || [];
           setProducts(list);
           setHighlightedIndex(0);
         })
@@ -50,7 +47,7 @@ function PurchaseProductCombobox({ supplierId, onSelectProduct, onQuickAdd }) {
           setProducts([]);
         })
         .finally(() => setLoading(false));
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [query, supplierId, isOpen]);

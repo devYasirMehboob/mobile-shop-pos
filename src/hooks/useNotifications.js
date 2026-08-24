@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import * as api from "../api/notifications";
 import { logger } from "../utils/logger";
 
+import supabase, { isSupabaseConfigured } from "../api/supabaseClient";
+
 export default function useNotifications(pollingInterval = 60) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadSummary, setUnreadSummary] = useState({ total: 0, critical: 0, warning: 0, info: 0, success: 0 });
@@ -68,7 +70,23 @@ export default function useNotifications(pollingInterval = 60) {
   useEffect(() => {
     fetchSummary();
     fetchRecent(5);
-    
+
+    let channel = null;
+    if (isSupabaseConfigured()) {
+      const channelId = `notifications_rt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      channel = supabase
+        .channel(channelId)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "notifications" },
+          () => {
+            fetchSummary();
+            fetchRecent(5);
+          }
+        )
+        .subscribe();
+    }
+
     if (pollingInterval > 0) {
       pollIntervalRef.current = setInterval(() => {
         fetchSummary();
@@ -79,6 +97,9 @@ export default function useNotifications(pollingInterval = 60) {
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
+      }
+      if (channel) {
+        supabase.removeChannel(channel);
       }
     };
   }, [fetchSummary, fetchRecent, pollingInterval]);

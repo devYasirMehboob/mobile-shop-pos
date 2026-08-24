@@ -3,13 +3,21 @@ import supabase, { isSupabaseConfigured } from "./supabaseClient";
 
 export async function evaluateStoreAlerts() {
   if (isSupabaseConfigured()) {
-    const { data: prods } = await supabase.from("products").select("id, name, quantity, minimum_stock").eq("status", "active");
-    const { data: existingNotifs } = await supabase.from("notifications").select("source_key, status");
+    const [prodsRes, suppsRes, existingNotifsRes] = await Promise.all([
+      supabase.from("products").select("id, name, quantity, minimum_stock, status").eq("status", "active"),
+      supabase.from("suppliers").select("id, name, phone, opening_balance"),
+      supabase.from("notifications").select("source_key, status"),
+    ]);
 
-    const existingKeys = new Set((existingNotifs || []).map((n) => n.source_key));
+    const prods = prodsRes.data || [];
+    const supps = suppsRes.data || [];
+    const existingNotifs = existingNotifsRes.data || [];
+
+    const existingKeys = new Set(existingNotifs.map((n) => n.source_key));
     const toInsert = [];
 
-    (prods || []).forEach((p) => {
+    // 1. Stock Alerts
+    prods.forEach((p) => {
       const qty = Number(p.quantity || 0);
       const min = Number(p.minimum_stock || 5);
 
@@ -48,6 +56,28 @@ export async function evaluateStoreAlerts() {
       }
     });
 
+    // 2. High Supplier Balance Alerts
+    supps.forEach((s) => {
+      const balance = Number(s.opening_balance || 0);
+      if (balance >= 50000) {
+        const key = `supp_balance_${s.id}_high`;
+        if (!existingKeys.has(key)) {
+          toInsert.push({
+            notification_type: "supplier_balance",
+            severity: "warning",
+            title: `Outstanding Vendor Due: ${s.name}`,
+            message: `Pending payable balance of Rs. ${balance.toLocaleString()} for supplier ${s.name}. Review payments in Supplier Ledger.`,
+            module: "suppliers",
+            related_type: "supplier",
+            related_id: s.id,
+            action_url: `/suppliers?search=${encodeURIComponent(s.name)}`,
+            source_key: key,
+            status: "unread",
+          });
+        }
+      }
+    });
+
     if (toInsert.length > 0) {
       await supabase.from("notifications").insert(toInsert);
     }
@@ -59,9 +89,14 @@ export async function getNotifications(params = {}) {
     await evaluateStoreAlerts();
 
     let query = supabase.from("notifications").select("*").order("created_at", { ascending: false });
-    if (params.status && params.status !== "all") {
+    if (params.status === "dismissed") {
+      query = query.eq("status", "dismissed");
+    } else if (params.status && params.status !== "all") {
       query = query.eq("status", params.status);
+    } else {
+      query = query.neq("status", "dismissed");
     }
+
     if (params.severity && params.severity !== "all") {
       query = query.eq("severity", params.severity);
     }

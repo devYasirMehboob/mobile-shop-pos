@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { exportReport, getReport, getReportOptions } from "../api/reportsApi";
 import EmptyState from "../components/EmptyState";
 import Icon from "../components/Icon";
@@ -13,7 +13,9 @@ import ReportSummaryCards from "../components/reports/ReportSummaryCards";
 import ReportTable from "../components/reports/ReportTable";
 import { configs } from "../components/reports/reportConfig";
 import useAlert from "../hooks/useAlert";
+import useSettings from "../hooks/useSettings";
 import normalizeApiError from "../utils/normalizeApiError";
+import { exportReportToPdf } from "../utils/pdfExport";
 
 function localIso(date) {
   return (
@@ -33,7 +35,7 @@ function initialDates() {
   };
 }
 
-const initial = {
+const defaultInitial = {
   ...initialDates(),
   search: "",
   cashier_id: "",
@@ -69,14 +71,44 @@ const emptyOptions = {
 
 function params(filters) {
   return Object.fromEntries(
-    Object.entries(filters).filter(([, value]) => value !== "" && value !== null)
+    Object.entries(filters).filter(
+      ([, value]) => value !== "" && value !== null,
+    ),
   );
 }
 
 function ReportsPage() {
-  const [type, setType] = useState("overview");
-  const [filters, setFilters] = useState(initial);
-  const [search, setSearch] = useState("");
+  const { reportType } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Active Report Type from Route (fallback to overview)
+  const activeType = useMemo(() => {
+    if (reportType && configs[reportType]) return reportType;
+    return "overview";
+  }, [reportType]);
+
+  // Initial Filters synced from URL search params
+  const [filters, setFilters] = useState(() => {
+    const urlFrom = searchParams.get("date_from");
+    const urlTo = searchParams.get("date_to");
+    const urlSearch = searchParams.get("search");
+    const urlCat = searchParams.get("category_id");
+    const urlSupp = searchParams.get("supplier_id");
+    const urlMethod = searchParams.get("payment_method");
+
+    return {
+      ...defaultInitial,
+      date_from: urlFrom || defaultInitial.date_from,
+      date_to: urlTo || defaultInitial.date_to,
+      search: urlSearch || "",
+      category_id: urlCat || "",
+      supplier_id: urlSupp || "",
+      payment_method: urlMethod || "",
+    };
+  });
+
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [data, setData] = useState({
     summary: {},
     rows: [],
@@ -89,12 +121,13 @@ function ReportsPage() {
   const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
   const alert = useAlert();
+  const { settings } = useSettings();
   const [exporting, setExporting] = useState(false);
-  const config = configs[type] || configs.overview;
+  const config = configs[activeType] || configs.overview;
 
   useEffect(() => {
-    document.title = "Reports | Dreams POS";
-  }, []);
+    document.title = `${config.title} | Reports | Dreams POS`;
+  }, [config]);
 
   useEffect(() => {
     getReportOptions()
@@ -106,17 +139,18 @@ function ReportsPage() {
       });
   }, []);
 
+  // Debounced search
   useEffect(() => {
-    const timer = setTimeout(
-      () =>
-        setFilters((current) =>
-          current.search === search ? current : { ...current, search, page: 1 }
-        ),
-      350
-    );
+    const timer = setTimeout(() => {
+      setFilters((current) => {
+        if (current.search === search) return current;
+        return { ...current, search, page: 1 };
+      });
+    }, 350);
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Load report data from API / Supabase
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -124,9 +158,9 @@ function ReportsPage() {
       setError("");
       try {
         const result = await getReport(
-          type,
-          params(filters),
-          controller.signal
+          activeType,
+          params({ ...filters, search }),
+          controller.signal,
         );
         setData(result);
       } catch (e) {
@@ -142,29 +176,42 @@ function ReportsPage() {
     }
     load();
     return () => controller.abort();
-  }, [type, filters, reload]);
+  }, [activeType, filters, search, reload]);
 
+  // Update filter handler
   function update(patch) {
     if (Object.hasOwn(patch, "search")) {
       setSearch(patch.search);
       return;
     }
-    setFilters((current) => ({ ...current, ...patch }));
+    setFilters((current) => {
+      const next = { ...current, ...patch };
+      // Sync dates/search to searchParams cleanly
+      const query = new URLSearchParams();
+      if (next.date_from) query.set("date_from", next.date_from);
+      if (next.date_to) query.set("date_to", next.date_to);
+      if (search) query.set("search", search);
+      setSearchParams(query, { replace: true });
+      return next;
+    });
   }
 
   function clear() {
     setSearch("");
-    setFilters({ ...initial, ...initialDates() });
+    const reset = { ...defaultInitial, ...initialDates() };
+    setFilters(reset);
+    const query = new URLSearchParams();
+    query.set("date_from", reset.date_from);
+    query.set("date_to", reset.date_to);
+    setSearchParams(query, { replace: true });
   }
 
   function changeType(next) {
-    setType(next);
     setSearch("");
-    setFilters((current) => ({
-      ...initial,
-      ...initialDates(),
-      sort_by: configs[next]?.defaultSort || "created_at",
-    }));
+    const query = new URLSearchParams();
+    if (filters.date_from) query.set("date_from", filters.date_from);
+    if (filters.date_to) query.set("date_to", filters.date_to);
+    navigate(`/reports/${next}?${query.toString()}`);
   }
 
   function sort(column) {
@@ -178,24 +225,20 @@ function ReportsPage() {
     }));
   }
 
-  async function download() {
+  async function handleDownloadPdf() {
     setExporting(true);
     try {
-      const response = await exportReport(type, params(filters));
-      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `dreams-pos-report-${type}-${localIso(new Date())}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      alert.success("Filtered report exported successfully.");
+      await exportReportToPdf(
+        config.title,
+        data.rows || [],
+        visibleColumns,
+        data.summary || {},
+        filters,
+        settings?.shop || {}
+      );
+      alert.success("Report PDF downloaded successfully.");
     } catch (e) {
-      if (e.name !== "CanceledError") {
-        alert.error(normalizeApiError(e).message);
-      }
+      alert.error(normalizeApiError(e).message);
     } finally {
       setExporting(false);
     }
@@ -212,9 +255,9 @@ function ReportsPage() {
             "estimated_net_profit",
             "estimated_stock_value",
             "cost_impact",
-          ].includes(key)
+          ].includes(key),
       ),
-    [config, data.permissions]
+    [config, data.permissions],
   );
 
   return (
@@ -230,33 +273,33 @@ function ReportsPage() {
               Dashboard
             </Link>
             <span>›</span>
-            <span className="text-slate-600 font-bold">Reports &amp; Analytics</span>
+            <span className="text-slate-600 font-bold">
+              Reports &amp; Analytics
+            </span>
+            {activeType !== "overview" && (
+              <>
+                <span>›</span>
+                <span className="text-[#FF9F43] font-bold capitalize">
+                  {config.title}
+                </span>
+              </>
+            )}
           </nav>
         </div>
 
-        {/* Right Actions: PDF, Excel, Print, Refresh */}
+        {/* Right Actions: Download PDF, Print, Refresh */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* PDF Export Icon */}
+          {/* Download PDF Button */}
           <button
             type="button"
-            onClick={() => window.print()}
-            className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition cursor-pointer"
-            title="Export PDF"
-            aria-label="Export PDF"
+            disabled={exporting || !data.rows?.length}
+            onClick={handleDownloadPdf}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF Document"
+            aria-label="Download PDF"
           >
-            <span className="text-xs font-black">📄</span>
-          </button>
-
-          {/* Excel Export Icon */}
-          <button
-            type="button"
-            disabled={exporting || data.permissions?.can_export === false}
-            onClick={download}
-            className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer disabled:opacity-50"
-            title="Export CSV / Excel"
-            aria-label="Export CSV / Excel"
-          >
-            <span className="text-xs font-black">📊</span>
+            <Icon name="download" className="size-3.5 text-rose-600" />
+            <span>PDF</span>
           </button>
 
           {/* Print Icon */}
@@ -287,39 +330,44 @@ function ReportsPage() {
         </div>
       </section>
 
-      {/* 2. 2-COLUMN LAYOUT (WORKSPACE ON LEFT, REPORT NAVIGATION ON RIGHT) */}
+      {/* 2. TOP FULL WIDTH: DYNAMIC METRIC SUMMARY CARDS */}
+      <section className="no-print">
+        <ReportSummaryCards summary={data.summary} />
+      </section>
+
+      {/* 3. 2-COLUMN MAIN BODY (WORKSPACE ON LEFT, REPORT NAVIGATION ON RIGHT) */}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[minmax(0,1fr)_280px]">
         {/* Main Analytics Workspace */}
         <div className="min-w-0 space-y-5 report-print-root">
           <ReportPrintHeader title={config.title} filters={filters} />
 
-          {/* Report Title & Description Card */}
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
-            <div className="flex items-center justify-between">
+          {/* Report Title & Filter Card */}
+          <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs no-print">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-[#0B1E38] tracking-tight">
+                <h2 className="text-lg font-black text-[#0B1E38] tracking-tight">
                   {config.title}
-                </h3>
+                </h2>
                 <p className="mt-0.5 text-xs text-slate-400 font-medium">
                   {config.description}
                 </p>
               </div>
-              <span className="rounded-lg bg-orange-100 px-2.5 py-1 text-[10px] font-black uppercase text-[#FF9F43] tracking-widest">
-                Active Module
+              <span className="rounded-lg bg-orange-100 px-3 py-1 text-[11px] font-black uppercase text-[#FF9F43] tracking-widest">
+                ACTIVE MODULE
               </span>
             </div>
 
-            {/* Filter Controls Inside Workspace */}
+            {/* Filter Controls Bar */}
             <div className="mt-4 pt-4 border-t border-slate-100">
               <ReportFilters
-                type={type}
+                type={activeType}
                 filters={{ ...filters, search }}
                 options={options}
                 onChange={update}
                 onClear={clear}
               />
             </div>
-          </div>
+          </section>
 
           {/* Error Banner */}
           {error ? (
@@ -343,9 +391,6 @@ function ReportsPage() {
             </div>
           ) : (
             <>
-              {/* Dynamic Summary Metric Cards */}
-              <ReportSummaryCards summary={data.summary} />
-
               {/* Chart Visualizer */}
               {data.chart?.length > 0 && (
                 <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
@@ -382,9 +427,9 @@ function ReportsPage() {
           )}
         </div>
 
-        {/* Right Navigation Panel */}
-        <div className="no-print">
-          <ReportNavigation active={type} onChange={changeType} />
+        {/* Right Navigation Panel (Sticky & Compact) */}
+        <div className="no-print lg:sticky lg:top-20 self-start">
+          <ReportNavigation active={activeType} onChange={changeType} />
         </div>
       </div>
     </div>

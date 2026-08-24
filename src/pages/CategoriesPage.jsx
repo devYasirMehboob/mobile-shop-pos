@@ -227,29 +227,8 @@ function CategoriesPage() {
           </nav>
         </div>
 
-        {/* Right Actions: PDF, Excel, Refresh, Collapse, + Add Category */}
+        {/* Right Actions: Refresh, Collapse, + Add Category */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* PDF Export Icon */}
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="grid size-9 place-items-center rounded-xl bg-rose-50 text-rose-600 shadow-2xs hover:bg-rose-100 transition cursor-pointer"
-            title="Export PDF"
-            aria-label="Export PDF"
-          >
-            <span className="text-xs font-black">📄</span>
-          </button>
-
-          {/* Excel Export Icon */}
-          <button
-            type="button"
-            onClick={() => alert.success("Excel export generated.")}
-            className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600 shadow-2xs hover:bg-emerald-100 transition cursor-pointer"
-            title="Export Excel"
-            aria-label="Export Excel"
-          >
-            <span className="text-xs font-black">📊</span>
-          </button>
 
           {/* Refresh Button */}
           <button

@@ -153,6 +153,10 @@ function App() {
               element={permitted("reports.view", <ReportsPage />)}
             />
             <Route
+              path="reports/:reportType"
+              element={permitted("reports.view", <ReportsPage />)}
+            />
+            <Route
               path="reports/packaging-stock"
               element={permitted("reports.view", <PackagingStockPage />)}
             />

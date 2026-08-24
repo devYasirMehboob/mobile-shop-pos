@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import useNotifications from "../hooks/useNotifications";
-import usePermissions from "../hooks/usePermissions";
+import useAlert from "../hooks/useAlert";
+import EmptyState from "../components/EmptyState";
 import Icon from "../components/Icon";
 import LoadingState from "../components/LoadingState";
-import EmptyState from "../components/EmptyState";
-import NotificationPreferencesDialog from "./NotificationPreferencesDialog";
+import useNotifications from "../hooks/useNotifications";
+import usePermissions from "../hooks/usePermissions";
 import AnnouncementModal from "./AnnouncementModal";
+import NotificationPreferencesDialog from "./NotificationPreferencesDialog";
 
 export default function NotificationsPage() {
   const { can } = usePermissions();
+  const alert = useAlert();
   const {
     unreadSummary,
     notificationsList,
@@ -75,31 +77,43 @@ export default function NotificationsPage() {
     await triggerEvaluation();
     await loadData();
     setIsEvaluating(false);
+    alert.success("System alerts scanned and updated in real time.");
   };
 
   const handleResolve = async (id) => {
     await resolve(id);
+    alert.success("Alert marked as resolved.");
     loadData();
   };
 
   const handleMarkAsRead = async (id) => {
     await markAsRead(id);
+    alert.success("Notification marked as read.");
     loadData();
   };
 
   const handleMarkAsUnread = async (id) => {
     await markAsUnread(id);
+    alert.info("Notification marked as unread.");
+    loadData();
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllAsRead();
+    alert.success("All notifications marked as read.");
     loadData();
   };
 
   const handleDismiss = async (id) => {
     await dismiss(id);
+    alert.info("Notification dismissed.");
     loadData();
   };
 
   const handleDismissAll = async () => {
     if (window.confirm("Are you sure you want to dismiss all notifications?")) {
       await dismissAll();
+      alert.success("All notifications dismissed.");
       loadData();
     }
   };
@@ -183,11 +197,24 @@ export default function NotificationsPage() {
           {unreadSummary?.total > 0 && (
             <button
               type="button"
-              onClick={markAllAsRead}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-4 py-2 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 hover:bg-[#F38C2A] transition active:scale-95 cursor-pointer"
+              onClick={handleMarkAllRead}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#FF9F43] px-3.5 py-2 text-xs font-extrabold text-white shadow-sm shadow-orange-500/20 hover:bg-[#F38C2A] transition active:scale-95 cursor-pointer"
             >
               <Icon name="check" className="size-3.5" />
               <span>Mark All Read</span>
+            </button>
+          )}
+
+          {/* Clear All Notifications */}
+          {notificationsList?.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDismissAll}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-extrabold text-rose-700 shadow-2xs hover:bg-rose-100 transition active:scale-95 cursor-pointer"
+              title="Clear all alerts"
+            >
+              <Icon name="trash" className="size-3.5" />
+              <span>Clear All</span>
             </button>
           )}
         </div>

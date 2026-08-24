@@ -948,5 +948,230 @@ export async function exportExpenseToPdf(expense, shop = {}) {
   return true;
 }
 
+/**
+ * Loads an image from a URL or base64 string
+ */
+function loadImage(src) {
+  return new Promise((resolve) => {
+    if (!src) return resolve(null);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/**
+ * Renders an official A4 Landscape Business Report onto Canvas for high-res PDF generation
+ * Fixed A4 Proportion (1414 x 1000) prevents any vertical squashing or stretching.
+ */
+async function renderReportToCanvas(title, rows = [], columns = [], summary = {}, filters = {}, shop = {}) {
+  const canvasWidth = 1414;
+  const standardA4Height = 1000;
+  const margin = 48;
+  const contentWidth = canvasWidth - margin * 2;
+
+  // Calculate required dynamic height
+  const baseHeaderHeight = 160;
+  const rowHeight = 32;
+  const tableHeaderHeight = 38;
+  const footerHeight = 60;
+  const totalContentHeight = baseHeaderHeight + tableHeaderHeight + Math.min(rows.length, 50) * rowHeight + footerHeight;
+  const canvasHeight = Math.max(standardA4Height, totalContentHeight + margin);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not initialize 2D canvas context.");
+
+  // Background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  const fontSans = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  const fontMono = '"SF Mono", "Roboto Mono", "Courier New", Courier, monospace';
+
+  let y = margin;
+
+  // 1. Header (Shop branding)
+  const shopName = (shop.shop_name || "Abdullah Mobile Shop").toUpperCase();
+  const address = shop.address || "Gharaka road Vijhainwala";
+  const phone = shop.phone || "+92 300 1234567";
+  const email = shop.email || "";
+
+  // Load and draw logo if available
+  let textLeft = margin;
+  if (shop.logo) {
+    const logoImg = await loadImage(shop.logo);
+    if (logoImg) {
+      ctx.drawImage(logoImg, margin, y, 64, 64);
+      textLeft = margin + 78;
+    }
+  }
+
+  // Shop Title & Info
+  ctx.fillStyle = "#0b1e38";
+  ctx.font = `bold 24px ${fontSans}`;
+  ctx.textAlign = "left";
+  ctx.fillText(shopName, textLeft, y + 24);
+
+  ctx.fillStyle = "#64748b";
+  ctx.font = `500 13px ${fontSans}`;
+  ctx.fillText(address, textLeft, y + 46);
+  ctx.fillText(`Phone: ${phone} ${email ? `| Email: ${email}` : ""}`, textLeft, y + 66);
+
+  // Right side: Report Title & Period
+  ctx.textAlign = "right";
+  ctx.fillStyle = "#0e2040";
+  ctx.font = `900 20px ${fontSans}`;
+  ctx.fillText((title || "ANALYTICAL REPORT").toUpperCase(), canvasWidth - margin, y + 24);
+
+  ctx.fillStyle = "#475569";
+  ctx.font = `600 13px ${fontSans}`;
+  const dateFrom = filters.date_from || "Start";
+  const dateTo = filters.date_to || "Today";
+  ctx.fillText(`Period: ${dateFrom} to ${dateTo}`, canvasWidth - margin, y + 48);
+
+  ctx.font = `400 11px ${fontMono}`;
+  ctx.fillStyle = "#94a3b8";
+  ctx.fillText(`Generated: ${formatDateTime(new Date())}`, canvasWidth - margin, y + 68);
+
+  y += 88;
+
+  // Header Divider
+  ctx.strokeStyle = "#0e2040";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(margin, y);
+  ctx.lineTo(canvasWidth - margin, y);
+  ctx.stroke();
+
+  y += 24;
+
+  // 2. Table Headers
+  const colCount = Math.max(1, columns.length);
+  const colWidth = contentWidth / colCount;
+
+  // Table header background
+  ctx.fillStyle = "#0e2040";
+  ctx.fillRect(margin, y, contentWidth, tableHeaderHeight);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold 12px ${fontSans}`;
+  ctx.textAlign = "left";
+
+  columns.forEach(([key, colTitle], idx) => {
+    const x = margin + idx * colWidth + 12;
+    ctx.fillText(colTitle.toUpperCase(), x, y + 24);
+  });
+
+  y += tableHeaderHeight;
+
+  // 3. Table Rows
+  const maxRows = Math.min(rows.length, 50);
+  for (let r = 0; r < maxRows; r++) {
+    const row = rows[r];
+    const rowY = y;
+    const isEven = r % 2 === 0;
+
+    // Row Background
+    ctx.fillStyle = isEven ? "#f8fafc" : "#ffffff";
+    ctx.fillRect(margin, rowY, contentWidth, rowHeight);
+
+    // Row Bottom Border
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margin, rowY + rowHeight);
+    ctx.lineTo(canvasWidth - margin, rowY + rowHeight);
+    ctx.stroke();
+
+    ctx.font = `500 12px ${fontSans}`;
+    ctx.fillStyle = "#1e293b";
+    ctx.textAlign = "left";
+
+    columns.forEach(([key], cIdx) => {
+      const x = margin + cIdx * colWidth + 12;
+      let val = row[key];
+      if (val === undefined || val === null || val === "") {
+        val = "—";
+      } else if (
+        typeof val === "number" ||
+        [
+          "grand_total",
+          "amount",
+          "net_sales",
+          "gross_sales",
+          "gross_profit",
+          "cost_of_goods",
+          "estimated_net_profit",
+          "estimated_stock_value",
+          "total_purchases",
+          "amount_paid",
+          "balance_due",
+          "current_balance",
+          "cost_impact",
+          "return_value",
+          "refund_amount",
+        ].includes(key)
+      ) {
+        val = formatCurrency(Number(val) || 0);
+      }
+
+      // Format Money Values with bold styling
+      if (typeof val === "string" && (val.startsWith("Rs.") || val.includes("-Rs."))) {
+        ctx.font = `bold 12px ${fontMono}`;
+        ctx.fillStyle = val.includes("-") ? "#e11d48" : "#0f172a";
+      } else {
+        ctx.font = `500 12px ${fontSans}`;
+        ctx.fillStyle = "#334155";
+      }
+
+      ctx.fillText(String(val).slice(0, 26), x, rowY + 20);
+    });
+
+    y += rowHeight;
+  }
+
+  y += 24;
+
+  // 4. Footer
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(margin, y);
+  ctx.lineTo(canvasWidth - margin, y);
+  ctx.stroke();
+
+  y += 20;
+  ctx.font = `italic 11px ${fontSans}`;
+  ctx.fillStyle = "#64748b";
+  ctx.textAlign = "left";
+  ctx.fillText("Dreams POS Analytical Engine — Official Business Record", margin, y);
+
+  ctx.textAlign = "right";
+  ctx.fillText(`Page 1 of 1 • Total Records: ${rows.length}`, canvasWidth - margin, y);
+
+  return canvas;
+}
+
+export async function exportReportToPdf(title, rows = [], columns = [], summary = {}, filters = {}, shop = {}) {
+  const canvas = await renderReportToCanvas(title, rows, columns, summary, filters, shop);
+  const jpegData = canvas.toDataURL("image/jpeg", 0.96);
+
+  const paperWidthMm = 297; // A4 Landscape
+  const paperHeightMm = Math.round((canvas.height / canvas.width) * paperWidthMm);
+
+  const safeTitle = (title || "Report").toLowerCase().replaceAll(" ", "-");
+  const filename = `${safeTitle}-${new Date().toISOString().slice(0, 10)}.pdf`;
+
+  const pdfBlob = generatePdfFromJpeg(jpegData, paperWidthMm, paperHeightMm);
+  triggerFileDownload(pdfBlob, filename);
+  return true;
+}
+
+
 
 

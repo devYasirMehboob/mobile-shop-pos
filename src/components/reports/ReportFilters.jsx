@@ -104,10 +104,11 @@ function ReportFilters({ type, filters, options, onChange, onClear }) {
 
   return (
     <section className="premium-surface overflow-hidden rounded-2xl no-print border border-slate-100 shadow-sm">
-      <div className="bg-slate-50/50 p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Top Bar: Quick Range Presets */}
+      <div className="bg-slate-50/60 p-3.5 px-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
         {dated ? (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-2 text-xs font-bold text-slate-400">
+            <span className="text-xs font-bold text-slate-400">
               Quick ranges:
             </span>
             {[
@@ -122,39 +123,22 @@ function ReportFilters({ type, filters, options, onChange, onClear }) {
                 key={key}
                 type="button"
                 onClick={() => onChange(range(key))}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-none"
+                className="rounded border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus:ring-2 focus:ring-slate-200 focus:outline-none cursor-pointer"
               >
                 {text}
               </button>
             ))}
           </div>
         ) : (
-          <div className="text-xs font-bold text-slate-400">Filters</div>
+          <div className="text-xs font-bold text-slate-400">
+            Filter Parameters
+          </div>
         )}
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          {hasAdvanced && (
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((s) => !s)}
-              className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 border border-slate-200 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
-            >
-              <Icon name="filter" className="size-3.5 text-slate-500" />
-              <span>{showAdvanced ? "Hide filters" : "More filters"}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onClear}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-rose-600 transition cursor-pointer pr-1"
-          >
-            <Icon name="x" className="size-3.5" />
-            <span>Clear</span>
-          </button>
-        </div>
       </div>
 
-      <div className="p-4 sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Main Filter Grid: Dates + Search + Aligned Action Buttons */}
+      <div className="p-4 sm:p-5 space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 items-end">
           {dated && (
             <>
               <FilterField label="Date From">
@@ -188,11 +172,7 @@ function ReportFilters({ type, filters, options, onChange, onClear }) {
             "profit",
             "payment_methods",
           ].includes(type) && (
-            <div
-              className={
-                dated && !showAdvanced ? "sm:col-span-2 xl:col-span-2" : ""
-              }
-            >
+            <div>
               <FilterField label="Search Report" icon="search">
                 <input
                   className={`${field} pl-9`}
@@ -206,267 +186,291 @@ function ReportFilters({ type, filters, options, onChange, onClear }) {
             </div>
           )}
 
-          {showAdvanced && (
-            <>
-              {product && (
-                <FilterField label="Product">
-                  <select
-                    className={field}
-                    value={filters.product_id}
-                    onChange={(e) =>
-                      onChange({ product_id: e.target.value, page: 1 })
-                    }
-                  >
-                    <option value="">All products</option>
-                    {options.products.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                  </select>
-                </FilterField>
-              )}
-              {category && (
-                <FilterField label="Category">
-                  <select
-                    className={field}
-                    value={filters.category_id}
-                    onChange={(e) =>
-                      onChange({ category_id: e.target.value, page: 1 })
-                    }
-                  >
-                    <option value="">All categories</option>
-                    {options.categories.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                  </select>
-                </FilterField>
-              )}
-              {purchase && (
-                <FilterField label="Supplier">
-                  <select
-                    className={field}
-                    value={filters.supplier_id}
-                    onChange={(e) =>
-                      onChange({ supplier_id: e.target.value, page: 1 })
-                    }
-                  >
-                    <option value="">All suppliers</option>
-                    {options.suppliers.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                  </select>
-                </FilterField>
-              )}
-              {sales && (
-                <FilterField label="Cashier">
-                  <select
-                    className={field}
-                    value={filters.cashier_id}
-                    onChange={(e) =>
-                      onChange({ cashier_id: e.target.value, page: 1 })
-                    }
-                  >
-                    <option value="">All cashiers</option>
-                    {options.cashiers.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.role}
-                      </option>
-                    ))}
-                  </select>
-                </FilterField>
-              )}
-              {["sales", "payment_methods"].includes(type) && (
-                <FilterField label="Payment Method">
-                  <select
-                    className={field}
-                    value={filters.payment_method}
-                    onChange={(e) =>
-                      onChange({ payment_method: e.target.value, page: 1 })
-                    }
-                  >
-                    <option value="">All payment methods</option>
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="bank_transfer">Bank transfer</option>
-                    <option value="mobile_wallet">Mobile wallet</option>
-                    <option value="other">Other</option>
-                  </select>
-                </FilterField>
-              )}
-              {type === "sales" && (
-                <>
-                  <FilterField label="Status">
-                    <select
-                      className={field}
-                      value={filters.sale_status}
-                      onChange={(e) =>
-                        onChange({ sale_status: e.target.value, page: 1 })
-                      }
-                    >
-                      <option value="">All statuses</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="refunded">Refunded</option>
-                    </select>
-                  </FilterField>
-                  <FilterField label="Min Total">
-                    <input
-                      type="number"
-                      min="0"
-                      className={field}
-                      placeholder="e.g. 100"
-                      value={filters.min_total}
-                      onChange={(e) =>
-                        onChange({ min_total: e.target.value, page: 1 })
-                      }
-                    />
-                  </FilterField>
-                  <FilterField label="Max Total">
-                    <input
-                      type="number"
-                      min="0"
-                      className={field}
-                      placeholder="e.g. 5000"
-                      value={filters.max_total}
-                      onChange={(e) =>
-                        onChange({ max_total: e.target.value, page: 1 })
-                      }
-                    />
-                  </FilterField>
-                </>
-              )}
-              {type === "expenses" && (
-                <>
-                  <FilterField label="Expense Category">
-                    <select
-                      className={field}
-                      value={filters.expense_category_id}
-                      onChange={(e) =>
-                        onChange({
-                          expense_category_id: e.target.value,
-                          page: 1,
-                        })
-                      }
-                    >
-                      <option value="">All expense categories</option>
-                      {options.expense_categories.map((x) => (
-                        <option key={x.id} value={x.id}>
-                          {x.name}
-                        </option>
-                      ))}
-                    </select>
-                  </FilterField>
-                  <FilterField label="Expense Status">
-                    <select
-                      className={field}
-                      value={filters.expense_status}
-                      onChange={(e) =>
-                        onChange({ expense_status: e.target.value, page: 1 })
-                      }
-                    >
-                      <option value="active">Active</option>
-                      <option value="voided">Voided</option>
-                      <option value="all">All statuses</option>
-                    </select>
-                  </FilterField>
-                  <FilterField label="Min Amount">
-                    <input
-                      type="number"
-                      min="0"
-                      className={field}
-                      placeholder="e.g. 100"
-                      value={filters.min_amount}
-                      onChange={(e) =>
-                        onChange({ min_amount: e.target.value, page: 1 })
-                      }
-                    />
-                  </FilterField>
-                  <FilterField label="Max Amount">
-                    <input
-                      type="number"
-                      min="0"
-                      className={field}
-                      placeholder="e.g. 1000"
-                      value={filters.max_amount}
-                      onChange={(e) =>
-                        onChange({ max_amount: e.target.value, page: 1 })
-                      }
-                    />
-                  </FilterField>
-                </>
-              )}
-              {type === "profit" && (
-                <FilterField label="Group By">
-                  <select
-                    className={field}
-                    value={filters.group_by}
-                    onChange={(e) =>
-                      onChange({ group_by: e.target.value, page: 1 })
-                    }
-                  >
-                    <option value="day">Group daily</option>
-                    <option value="week">Group weekly</option>
-                    <option value="month">Group monthly</option>
-                  </select>
-                </FilterField>
-              )}
-              {type === "stock" && (
-                <>
-                  <FilterField label="Stock Status">
-                    <select
-                      className={field}
-                      value={filters.stock_status}
-                      onChange={(e) =>
-                        onChange({ stock_status: e.target.value, page: 1 })
-                      }
-                    >
-                      <option value="">All stock statuses</option>
-                      <option value="in_stock">In stock</option>
-                      <option value="low_stock">Low stock</option>
-                      <option value="out_of_stock">Out of stock</option>
-                    </select>
-                  </FilterField>
-                  <FilterField label="Tracking Mode">
-                    <select
-                      className={field}
-                      value={filters.tracking}
-                      onChange={(e) =>
-                        onChange({ tracking: e.target.value, page: 1 })
-                      }
-                    >
-                      <option value="">All tracking modes</option>
-                      <option value="tracked">Tracked</option>
-                      <option value="untracked">Not tracked</option>
-                    </select>
-                  </FilterField>
-                </>
-              )}
-              {type === "wastage" && (
-                <FilterField label="Loss Type">
-                  <select
-                    className={field}
-                    value={filters.transaction_type}
-                    onChange={(e) =>
-                      onChange({ transaction_type: e.target.value, page: 1 })
-                    }
-                  >
-                    <option value="">All loss types</option>
-                    <option value="wastage">Wastage</option>
-                    <option value="damaged">Damaged</option>
-                    <option value="expired">Expired</option>
-                  </select>
-                </FilterField>
-              )}
-            </>
-          )}
+          {/* Action Buttons Aligned with Inputs */}
+          <div className="flex items-center gap-2">
+            {hasAdvanced && (
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((s) => !s)}
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-white px-3.5 text-xs font-bold text-slate-700 border border-slate-200 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                <Icon name="filter" className="size-3.5 text-slate-500" />
+                <span>{showAdvanced ? "Hide filters" : "More filters"}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClear}
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-600 shadow-2xs hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
+              title="Reset All Filters"
+            >
+              <Icon name="refresh" className="size-3.5 text-slate-400" />
+              <span>Clear</span>
+            </button>
+          </div>
         </div>
+
+        {showAdvanced && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 pt-4 border-t border-slate-100">
+            {product && (
+              <FilterField label="Product">
+                <select
+                  className={field}
+                  value={filters.product_id}
+                  onChange={(e) =>
+                    onChange({ product_id: e.target.value, page: 1 })
+                  }
+                >
+                  <option value="">All products</option>
+                  {options.products.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            )}
+            {category && (
+              <FilterField label="Category">
+                <select
+                  className={field}
+                  value={filters.category_id}
+                  onChange={(e) =>
+                    onChange({ category_id: e.target.value, page: 1 })
+                  }
+                >
+                  <option value="">All categories</option>
+                  {options.categories.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            )}
+            {purchase && (
+              <FilterField label="Supplier">
+                <select
+                  className={field}
+                  value={filters.supplier_id}
+                  onChange={(e) =>
+                    onChange({ supplier_id: e.target.value, page: 1 })
+                  }
+                >
+                  <option value="">All suppliers</option>
+                  {options.suppliers.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            )}
+            {sales && (
+              <FilterField label="Cashier">
+                <select
+                  className={field}
+                  value={filters.cashier_id}
+                  onChange={(e) =>
+                    onChange({ cashier_id: e.target.value, page: 1 })
+                  }
+                >
+                  <option value="">All cashiers</option>
+                  {options.cashiers.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.role}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            )}
+            {["sales", "payment_methods"].includes(type) && (
+              <FilterField label="Payment Method">
+                <select
+                  className={field}
+                  value={filters.payment_method}
+                  onChange={(e) =>
+                    onChange({ payment_method: e.target.value, page: 1 })
+                  }
+                >
+                  <option value="">All payment methods</option>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="mobile_wallet">Mobile wallet</option>
+                  <option value="other">Other</option>
+                </select>
+              </FilterField>
+            )}
+            {type === "sales" && (
+              <>
+                <FilterField label="Status">
+                  <select
+                    className={field}
+                    value={filters.sale_status}
+                    onChange={(e) =>
+                      onChange({ sale_status: e.target.value, page: 1 })
+                    }
+                  >
+                    <option value="">All statuses</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
+                </FilterField>
+                <FilterField label="Min Total">
+                  <input
+                    type="number"
+                    min="0"
+                    className={field}
+                    placeholder="e.g. 100"
+                    value={filters.min_total}
+                    onChange={(e) =>
+                      onChange({ min_total: e.target.value, page: 1 })
+                    }
+                  />
+                </FilterField>
+                <FilterField label="Max Total">
+                  <input
+                    type="number"
+                    min="0"
+                    className={field}
+                    placeholder="e.g. 5000"
+                    value={filters.max_total}
+                    onChange={(e) =>
+                      onChange({ max_total: e.target.value, page: 1 })
+                    }
+                  />
+                </FilterField>
+              </>
+            )}
+            {type === "expenses" && (
+              <>
+                <FilterField label="Expense Category">
+                  <select
+                    className={field}
+                    value={filters.expense_category_id}
+                    onChange={(e) =>
+                      onChange({
+                        expense_category_id: e.target.value,
+                        page: 1,
+                      })
+                    }
+                  >
+                    <option value="">All expense categories</option>
+                    {options.expense_categories.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                  </select>
+                </FilterField>
+                <FilterField label="Expense Status">
+                  <select
+                    className={field}
+                    value={filters.expense_status}
+                    onChange={(e) =>
+                      onChange({ expense_status: e.target.value, page: 1 })
+                    }
+                  >
+                    <option value="active">Active</option>
+                    <option value="voided">Voided</option>
+                    <option value="all">All statuses</option>
+                  </select>
+                </FilterField>
+                <FilterField label="Min Amount">
+                  <input
+                    type="number"
+                    min="0"
+                    className={field}
+                    placeholder="e.g. 100"
+                    value={filters.min_amount}
+                    onChange={(e) =>
+                      onChange({ min_amount: e.target.value, page: 1 })
+                    }
+                  />
+                </FilterField>
+                <FilterField label="Max Amount">
+                  <input
+                    type="number"
+                    min="0"
+                    className={field}
+                    placeholder="e.g. 1000"
+                    value={filters.max_amount}
+                    onChange={(e) =>
+                      onChange({ max_amount: e.target.value, page: 1 })
+                    }
+                  />
+                </FilterField>
+              </>
+            )}
+            {type === "profit" && (
+              <FilterField label="Group By">
+                <select
+                  className={field}
+                  value={filters.group_by}
+                  onChange={(e) =>
+                    onChange({ group_by: e.target.value, page: 1 })
+                  }
+                >
+                  <option value="day">Group daily</option>
+                  <option value="week">Group weekly</option>
+                  <option value="month">Group monthly</option>
+                </select>
+              </FilterField>
+            )}
+            {type === "stock" && (
+              <>
+                <FilterField label="Stock Status">
+                  <select
+                    className={field}
+                    value={filters.stock_status}
+                    onChange={(e) =>
+                      onChange({ stock_status: e.target.value, page: 1 })
+                    }
+                  >
+                    <option value="">All stock statuses</option>
+                    <option value="in_stock">In stock</option>
+                    <option value="low_stock">Low stock</option>
+                    <option value="out_of_stock">Out of stock</option>
+                  </select>
+                </FilterField>
+                <FilterField label="Tracking Mode">
+                  <select
+                    className={field}
+                    value={filters.tracking}
+                    onChange={(e) =>
+                      onChange({ tracking: e.target.value, page: 1 })
+                    }
+                  >
+                    <option value="">All tracking modes</option>
+                    <option value="tracked">Tracked</option>
+                    <option value="untracked">Not tracked</option>
+                  </select>
+                </FilterField>
+              </>
+            )}
+            {type === "wastage" && (
+              <FilterField label="Loss Type">
+                <select
+                  className={field}
+                  value={filters.transaction_type}
+                  onChange={(e) =>
+                    onChange({ transaction_type: e.target.value, page: 1 })
+                  }
+                >
+                  <option value="">All loss types</option>
+                  <option value="wastage">Wastage</option>
+                  <option value="damaged">Damaged</option>
+                  <option value="expired">Expired</option>
+                </select>
+              </FilterField>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
 }
+
 export default ReportFilters;

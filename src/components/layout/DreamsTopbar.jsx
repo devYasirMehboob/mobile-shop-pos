@@ -18,17 +18,12 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [showAddNewMenu, setShowAddNewMenu] = useState(false);
   const [showStoreMenu, setShowStoreMenu] = useState(false);
-  const [showLangMenu, setShowLangMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showMessages, setShowMessages] = useState(false);
-  const [selectedLang, setSelectedLang] = useState("EN");
 
   const searchInputRef = useRef(null);
   const addNewRef = useRef(null);
   const storeRef = useRef(null);
   const userRef = useRef(null);
-  const langRef = useRef(null);
-  const msgRef = useRef(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -36,8 +31,6 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
       if (addNewRef.current && !addNewRef.current.contains(e.target)) setShowAddNewMenu(false);
       if (storeRef.current && !storeRef.current.contains(e.target)) setShowStoreMenu(false);
       if (userRef.current && !userRef.current.contains(e.target)) setShowUserMenu(false);
-      if (langRef.current && !langRef.current.contains(e.target)) setShowLangMenu(false);
-      if (msgRef.current && !msgRef.current.contains(e.target)) setShowMessages(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -277,46 +270,7 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
           <span className="font-extrabold tracking-wide">POS</span>
         </Link>
 
-        {/* 4. Language Selector (Flag Icon) */}
-        <div className="relative hidden sm:block" ref={langRef}>
-          <button
-            type="button"
-            onClick={() => setShowLangMenu(!showLangMenu)}
-            className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-sm shadow-sm transition hover:bg-slate-50"
-            title="Language"
-          >
-            {selectedLang === "EN" ? "🇺🇸" : "🇵🇰"}
-          </button>
-
-          {showLangMenu && (
-            <div className="absolute right-0 top-full mt-2 w-36 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl z-50">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedLang("EN");
-                  setShowLangMenu(false);
-                }}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold transition ${selectedLang === "EN" ? "bg-orange-50 text-[#FF9F43]" : "text-slate-700 hover:bg-slate-50"}`}
-              >
-                <span>🇺🇸</span>
-                <span>English</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedLang("UR");
-                  setShowLangMenu(false);
-                }}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold transition ${selectedLang === "UR" ? "bg-orange-50 text-[#FF9F43]" : "text-slate-700 hover:bg-slate-50"}`}
-              >
-                <span>🇵🇰</span>
-                <span>Urdu (اردو)</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 5. Fullscreen Toggle */}
+        {/* 4. Fullscreen Toggle */}
         <button
           type="button"
           onClick={toggleFullscreen}
@@ -327,38 +281,7 @@ export default function DreamsTopbar({ isCollapsed, setIsCollapsed, onOpenMobile
           <Icon name={isFullscreen ? "shrink" : "expand"} className="size-4" />
         </button>
 
-        {/* 6. Messages / Mail Icon with badge */}
-        <div className="relative hidden md:block" ref={msgRef}>
-          <button
-            type="button"
-            onClick={() => setShowMessages(!showMessages)}
-            className="relative grid size-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-            title="Messages"
-          >
-            <Icon name="mail" className="size-4" />
-            <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white ring-2 ring-white">
-              1
-            </span>
-          </button>
-
-          {showMessages && (
-            <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl z-50">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <strong className="text-xs font-extrabold text-slate-900">Messages & Alerts</strong>
-                <span className="rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">1 New</span>
-              </div>
-              <div className="mt-2 space-y-2">
-                <div className="rounded-xl bg-slate-50 p-2.5 text-xs">
-                  <p className="font-bold text-slate-800">System Ready</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">Mobile Shop POS is connected to Supabase cloud database.</p>
-                  <span className="text-[10px] text-slate-400 mt-1 block">Just now</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 7. Notification Bell */}
+        {/* 5. Notification Bell */}
         {can("notifications.view") && (
           <div className="relative">
             <NotificationBell />

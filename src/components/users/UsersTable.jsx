@@ -80,6 +80,11 @@ function UsersTable({
                             You
                           </span>
                         )}
+                        {(user.is_demo === 1 || user.is_demo === true || user.email?.toLowerCase() === "test@mobileshop.com") && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700 border border-amber-200/80 shadow-2xs" title="Demo account protected from credential changes">
+                            🔒 Demo
+                          </span>
+                        )}
                       </div>
                       <span className="text-[11px] font-mono text-slate-400">
                         UID: #{String(user.id).padStart(4, "0")}

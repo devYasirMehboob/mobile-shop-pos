@@ -8,6 +8,7 @@ const empty = {
   phone: "",
   role: "cashier",
   status: "active",
+  is_demo: 0,
   password: "",
   password_confirmation: "",
 };
@@ -32,6 +33,7 @@ function UserForm({ isOpen, user, roles = [], onClose, onSave }) {
               phone: user.phone || "",
               role: user.role || "cashier",
               status: user.status || "active",
+              is_demo: user.is_demo === 1 || user.is_demo === true ? 1 : 0,
             }
           : empty
       );
@@ -40,8 +42,11 @@ function UserForm({ isOpen, user, roles = [], onClose, onSave }) {
   }, [isOpen, user]);
 
   function change(event) {
-    const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
+    const { name, value, type, checked } = event.target;
+    setForm((current) => ({
+      ...current,
+      [name]: type === "checkbox" ? (checked ? 1 : 0) : value,
+    }));
     setErrors((current) => ({ ...current, [name]: undefined }));
   }
 
@@ -67,6 +72,7 @@ function UserForm({ isOpen, user, roles = [], onClose, onSave }) {
             phone: form.phone,
             role: form.role,
             status: form.status,
+            is_demo: form.is_demo === 1 ? 1 : 0,
           }
         : form;
       await onSave(payload);
@@ -175,6 +181,27 @@ function UserForm({ isOpen, user, roles = [], onClose, onSave }) {
               </select>
               <FieldError errors={errors.status} />
             </div>
+          </div>
+
+          {/* Public Demo Account Toggle */}
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-center justify-between gap-3">
+            <div>
+              <strong className="block text-xs font-black text-amber-950">
+                🔒 Public Demo Account Protection
+              </strong>
+              <p className="text-[11px] font-medium text-amber-800">
+                Locks email, phone number, and password from being changed in public live testing.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                name="is_demo"
+                checked={form.is_demo === 1 || form.is_demo === true}
+                onChange={change}
+                className="size-5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-[#FF9F43] cursor-pointer"
+              />
+            </label>
           </div>
 
           {/* Password for New Users */}

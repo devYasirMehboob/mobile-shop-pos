@@ -5,7 +5,7 @@ export async function getUsers(params = {}) {
   if (isSupabaseConfigured()) {
     let query = supabase
       .from("access_credentials")
-      .select("id, name, email, phone, role, is_active, last_login_at, created_at, updated_at")
+      .select("*")
       .order("id", { ascending: true });
 
     if (params.search) {
@@ -25,6 +25,7 @@ export async function getUsers(params = {}) {
     const formatted = (data || []).map((u) => ({
       ...u,
       status: u.is_active === 1 || u.is_active === true ? "active" : "inactive",
+      is_demo: u.is_demo === 1 || u.email?.toLowerCase() === "test@mobileshop.com" ? 1 : 0,
     }));
 
     return {
@@ -53,7 +54,7 @@ export async function getUser(id) {
   if (isSupabaseConfigured()) {
     const { data, error } = await supabase
       .from("access_credentials")
-      .select("id, name, email, phone, role, is_active, last_login_at, created_at, updated_at")
+      .select("*")
       .eq("id", Number(id))
       .single();
 
@@ -62,6 +63,7 @@ export async function getUser(id) {
     const user = {
       ...data,
       status: data.is_active === 1 || data.is_active === true ? "active" : "inactive",
+      is_demo: data.is_demo === 1 || data.email?.toLowerCase() === "test@mobileshop.com" ? 1 : 0,
     };
 
     return {
@@ -99,13 +101,22 @@ export async function createUser(data) {
       password_hash: data.password,
       role: data.role || "cashier",
       is_active: data.status === "inactive" ? 0 : 1,
+      is_demo: data.is_demo === 1 || data.is_demo === true || generatedEmail.toLowerCase() === "test@mobileshop.com" ? 1 : 0,
     };
 
-    const { data: newUser, error } = await supabase
+    let { data: newUser, error } = await supabase
       .from("access_credentials")
       .insert([payload])
       .select()
       .single();
+
+    // Graceful fallback if is_demo column doesn't exist yet
+    if (error && error.code === "42703") {
+      delete payload.is_demo;
+      const res = await supabase.from("access_credentials").insert([payload]).select().single();
+      newUser = res.data;
+      error = res.error;
+    }
 
     if (error) throw new Error(error.message);
     return { success: true, message: "User account created successfully.", data: newUser };
@@ -123,16 +134,30 @@ export async function updateUser(id, data) {
       phone: data.phone || null,
       role: data.role,
       is_active: data.status === "inactive" ? 0 : 1,
+      is_demo: data.is_demo === 1 || data.is_demo === true || data.email?.toLowerCase() === "test@mobileshop.com" ? 1 : 0,
       updated_at: new Date().toISOString(),
     };
     if (data.password) updates.password_hash = data.password;
 
-    const { data: updated, error } = await supabase
+    let { data: updated, error } = await supabase
       .from("access_credentials")
       .update(updates)
       .eq("id", Number(id))
       .select()
       .single();
+
+    // Graceful fallback if is_demo column doesn't exist yet
+    if (error && error.code === "42703") {
+      delete updates.is_demo;
+      const res = await supabase
+        .from("access_credentials")
+        .update(updates)
+        .eq("id", Number(id))
+        .select()
+        .single();
+      updated = res.data;
+      error = res.error;
+    }
 
     if (error) throw new Error(error.message);
     return { success: true, message: "User account updated successfully.", data: updated };
@@ -176,7 +201,7 @@ export async function resetUserPassword(id, data) {
   return response.data;
 }
 
-const PROTECTED_DEMO_EMAILS = ["admin2@mobileshop.com", "admin@mobileshop.com", "cashier@mobileshop.com"];
+const PROTECTED_DEMO_EMAILS = ["test@mobileshop.com"];
 
 export async function updateMyProfile(id, { name, email, phone }) {
   if (isSupabaseConfigured()) {
@@ -187,7 +212,7 @@ export async function updateMyProfile(id, { name, email, phone }) {
     // Check if user is a protected demo account
     const cachedUser = localStorage.getItem("mobile_pos_user");
     const currentEmail = cachedUser ? JSON.parse(cachedUser)?.email?.toLowerCase() : cleanEmail;
-    const isProtected = PROTECTED_DEMO_EMAILS.includes(currentEmail) || PROTECTED_DEMO_EMAILS.includes(cleanEmail);
+    const isProtected = cachedUser && JSON.parse(cachedUser)?.is_demo === 1 || PROTECTED_DEMO_EMAILS.includes(currentEmail) || PROTECTED_DEMO_EMAILS.includes(cleanEmail);
 
     let updated = null;
 

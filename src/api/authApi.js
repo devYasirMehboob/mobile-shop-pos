@@ -24,7 +24,7 @@ export async function loginUser(email, password) {
       // Find or sync with access_credentials table for POS permissions & roles
       let { data: dbUser } = await supabase
         .from("access_credentials")
-        .select("id, name, email, phone, role, is_active")
+        .select("*")
         .ilike("email", cleanEmail)
         .maybeSingle();
 
@@ -47,6 +47,7 @@ export async function loginUser(email, password) {
         email: dbUser.email || cleanEmail,
         role: dbUser.role || "admin",
         phone: dbUser.phone || "",
+        is_demo: dbUser.is_demo === 1 || cleanEmail === "test@mobileshop.com" ? 1 : 0,
       };
     }
   } catch (err) {
@@ -62,7 +63,10 @@ export async function loginUser(email, password) {
       });
 
       if (!rpcError && rpcData?.success && rpcData.data?.user) {
-        authenticatedUser = rpcData.data.user;
+        authenticatedUser = {
+          ...rpcData.data.user,
+          is_demo: rpcData.data.user.is_demo === 1 || cleanEmail === "test@mobileshop.com" ? 1 : 0,
+        };
       }
     } catch (err) {
       // Continue to direct access_credentials query fallback
@@ -74,7 +78,7 @@ export async function loginUser(email, password) {
     try {
       const { data: credUser } = await supabase
         .from("access_credentials")
-        .select("id, name, email, phone, password_hash, role, is_active")
+        .select("*")
         .ilike("email", cleanEmail)
         .eq("is_active", 1)
         .maybeSingle();
@@ -86,6 +90,7 @@ export async function loginUser(email, password) {
           email: credUser.email,
           role: credUser.role || "admin",
           phone: credUser.phone || "",
+          is_demo: credUser.is_demo === 1 || cleanEmail === "test@mobileshop.com" ? 1 : 0,
         };
       }
     } catch (err) {

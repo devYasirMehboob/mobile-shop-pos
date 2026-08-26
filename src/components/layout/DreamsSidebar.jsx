@@ -296,8 +296,31 @@ export default function DreamsSidebar({
           ))}
         </nav>
 
-        {/* SIDEBAR FOOTER (User Account Details) */}
+        {/* SIDEBAR FOOTER (Contact Developer + User Account Details) */}
         <div className="p-3 border-t border-[#EAEFF5]">
+          {/* Contact Developer Button */}
+          {!isCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setShowContactModal(true)}
+              className="mb-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200/80 bg-blue-50/70 px-3 py-2 text-xs font-black text-blue-700 shadow-2xs hover:bg-blue-100 hover:border-blue-300 transition active:scale-98 cursor-pointer"
+              title="Contact Developer via WhatsApp & Email"
+            >
+              <span>👨‍💻</span>
+              <span>Contact Developer</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowContactModal(true)}
+              className="mb-2.5 mx-auto flex size-8 items-center justify-center rounded-xl border border-blue-200/80 bg-blue-50/70 text-sm shadow-2xs hover:bg-blue-100 transition active:scale-95 cursor-pointer"
+              title="Contact Developer"
+            >
+              👨‍💻
+            </button>
+          )}
+
+          {/* User Profile Card */}
           <div
             className={`flex items-center rounded-xl bg-slate-50/90 p-2 border border-slate-200/60 transition-all duration-300 ${
               isCollapsed ? "lg:justify-center lg:p-1.5 lg:bg-transparent lg:border-transparent" : ""
@@ -305,9 +328,9 @@ export default function DreamsSidebar({
           >
             <span
               className="grid size-8 shrink-0 place-items-center rounded-lg bg-gradient-to-tr from-[#0E2040] to-[#1E3A8A] text-xs font-black text-white shadow-xs"
-              title={isCollapsed ? user.name : undefined}
+              title={isCollapsed ? user?.name : undefined}
             >
-              {user.name.charAt(0).toUpperCase()}
+              {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
             </span>
 
             <div
@@ -318,10 +341,10 @@ export default function DreamsSidebar({
               }`}
             >
               <strong className="block truncate text-xs font-extrabold text-[#0B1E38]">
-                {user.name}
+                {user?.name || "Staff"}
               </strong>
               <span className="block truncate text-[10px] capitalize text-[#7A8A99] font-medium">
-                {user.role}
+                {user?.role || "Staff"}
               </span>
             </div>
 
@@ -339,6 +362,12 @@ export default function DreamsSidebar({
           </div>
         </div>
       </aside>
+
+      {/* Contact Developer Modal */}
+      <ContactDeveloperModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+      />
     </>
   );
 }

@@ -15,8 +15,11 @@ export default function UserProfileSettings() {
   const { user } = useAuth();
   const alert = useAlert();
 
-  const protectedEmails = ["admin2@mobileshop.com", "admin@mobileshop.com", "cashier@mobileshop.com"];
-  const isProtectedAccount = protectedEmails.includes(user?.email?.toLowerCase());
+  const protectedEmails = ["test@mobileshop.com"];
+  const isProtectedAccount =
+    user?.is_demo === 1 ||
+    user?.is_demo === true ||
+    protectedEmails.includes(user?.email?.toLowerCase());
 
   // Profile Form State
   const [profileForm, setProfileForm] = useState({

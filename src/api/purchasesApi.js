@@ -283,6 +283,23 @@ export async function createPurchase(values, draft = false) {
                 reference_id: purchase.id,
               },
             ]);
+
+            // Auto-create Batch entry in product_batches so it immediately appears on /batches
+            const autoBatchNum = it.batch_number || `BAT-${purchaseNum.replace(/[^A-Za-z0-9]/g, '')}-${prodId}`;
+            await supabase.from("product_batches").insert([
+              {
+                product_id: prodId,
+                purchase_id: purchase.id,
+                batch_number: autoBatchNum,
+                manufacturing_date: it.manufacturing_date || null,
+                expiry_date: it.expiry_date || null,
+                received_quantity: addedQty,
+                remaining_quantity: addedQty,
+                unit_cost: unitCost,
+                status: "active",
+                created_by: values.created_by || 1,
+              },
+            ]);
           }
         }
       }

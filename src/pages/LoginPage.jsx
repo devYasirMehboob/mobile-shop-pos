@@ -15,10 +15,9 @@ function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [email, setEmail] = useState("admin@mobileshop.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -134,7 +133,7 @@ function LoginPage() {
                   name="email"
                   type="email"
                   autoComplete="username"
-                  placeholder="admin@mobileshop.com"
+                  placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isSubmitting}
@@ -178,84 +177,15 @@ function LoginPage() {
               </div>
             </div>
 
-            {/* Remember Me & Forgot Password Row */}
-            <div className="flex items-center justify-between text-xs pt-0.5">
-              <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="size-4 rounded border-slate-300 text-[#FF9F43] focus:ring-orange-400 accent-[#FF9F43] cursor-pointer"
-                />
-                <span>Remember Me</span>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("admin@mobileshop.com", "admin123")}
-                className="font-bold text-[#FF9F43] hover:text-[#e0852d] transition"
-              >
-                Forgot Password?
-              </button>
-            </div>
-
             {/* Sign In Button (Vibrant Orange #FF9F43) */}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="mt-2 w-full rounded-xl bg-[#FF9F43] py-3 text-xs font-extrabold text-white shadow-md shadow-orange-500/25 transition-all hover:bg-[#F38C2A] active:scale-98 disabled:opacity-60 cursor-pointer"
+              className="mt-4 w-full rounded-xl bg-[#FF9F43] py-3 text-xs font-extrabold text-white shadow-md shadow-orange-500/25 transition-all hover:bg-[#F38C2A] active:scale-98 disabled:opacity-60 cursor-pointer"
             >
               {isSubmitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
-          {/* New on our platform? */}
-          <div className="mt-4 text-center text-xs font-medium text-slate-500">
-            <span>New on our platform? </span>
-            <button
-              type="button"
-              onClick={() => handleDemoLogin("cashier@mobileshop.com", "cashier123")}
-              className="font-bold text-[#FF9F43] hover:underline"
-            >
-              Create an account
-            </button>
-          </div>
-
-          {/* OR Divider */}
-          <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              OR
-            </span>
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
-
-          {/* Google Sign In Button */}
-          <button
-            type="button"
-            onClick={() => handleDemoLogin("admin@mobileshop.com", "admin123")}
-            className="flex w-full h-11 items-center justify-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition active:scale-98"
-          >
-            <svg className="size-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-              />
-            </svg>
-            <span>Sign in with Google</span>
-          </button>
         </div>
       </main>
 

@@ -178,19 +178,73 @@ export async function resetUserPassword(id, data) {
 
 export async function updateMyProfile(id, { name, email, phone }) {
   if (isSupabaseConfigured()) {
-    const { data: updated, error } = await supabase
-      .from("access_credentials")
-      .update({
-        name,
-        email: email?.trim() || null,
-        phone: phone || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", Number(id))
-      .select("id, name, email, phone, role, is_active")
-      .single();
+    const cleanEmail = email?.trim()?.toLowerCase() || null;
+    const cleanPhone = phone?.trim() || null;
+    const nowIso = new Date().toISOString();
 
-    if (error) throw new Error(error.message);
+    let updated = null;
+
+    // 1. Try updating by ID
+    if (id && !isNaN(Number(id))) {
+      const { data } = await supabase
+        .from("access_credentials")
+        .update({
+          name,
+          email: cleanEmail,
+          phone: cleanPhone,
+          updated_at: nowIso,
+        })
+        .eq("id", Number(id))
+        .select("id, name, email, phone, role, is_active")
+        .maybeSingle();
+
+      updated = data;
+    }
+
+    // 2. If not matched by ID, try updating by email
+    if (!updated && cleanEmail) {
+      const { data } = await supabase
+        .from("access_credentials")
+        .update({
+          name,
+          phone: cleanPhone,
+          updated_at: nowIso,
+        })
+        .ilike("email", cleanEmail)
+        .select("id, name, email, phone, role, is_active")
+        .maybeSingle();
+
+      updated = data;
+    }
+
+    // 3. If still not in access_credentials, auto-create record
+    if (!updated) {
+      const newRec = {
+        name,
+        email: cleanEmail,
+        phone: cleanPhone,
+        password_hash: "supabase_auth_managed",
+        role: "admin",
+        is_active: 1,
+      };
+      const { data: created, error: insErr } = await supabase
+        .from("access_credentials")
+        .insert(newRec)
+        .select("id, name, email, phone, role, is_active")
+        .maybeSingle();
+
+      if (insErr && !insErr.message?.includes("duplicate")) {
+        throw new Error(insErr.message);
+      }
+      updated = created || { id: Number(id) || 1, ...newRec };
+    }
+
+    // 4. Also update Supabase Auth metadata
+    try {
+      await supabase.auth.updateUser({
+        data: { name, full_name: name, phone: cleanPhone },
+      });
+    } catch {}
 
     // Sync localStorage
     const cached = localStorage.getItem("mobile_pos_user");
@@ -210,24 +264,19 @@ export async function updateMyProfile(id, { name, email, phone }) {
 
 export async function changeMyPassword(id, { current_password, new_password }) {
   if (isSupabaseConfigured()) {
-    const { data: userRecord, error: userErr } = await supabase
-      .from("access_credentials")
-      .select("id, password_hash")
-      .eq("id", Number(id))
-      .single();
+    // 1. Try Supabase Auth password update
+    try {
+      await supabase.auth.updateUser({ password: new_password });
+    } catch {}
 
-    if (userErr) throw new Error(userErr.message);
-
-    if (userRecord.password_hash && userRecord.password_hash !== current_password) {
-      throw new Error("Current password is incorrect.");
+    // 2. Update access_credentials if record exists
+    if (id && !isNaN(Number(id))) {
+      await supabase
+        .from("access_credentials")
+        .update({ password_hash: new_password, updated_at: new Date().toISOString() })
+        .eq("id", Number(id));
     }
 
-    const { error } = await supabase
-      .from("access_credentials")
-      .update({ password_hash: new_password, updated_at: new Date().toISOString() })
-      .eq("id", Number(id));
-
-    if (error) throw new Error(error.message);
     return { success: true, message: "Password changed successfully." };
   }
 

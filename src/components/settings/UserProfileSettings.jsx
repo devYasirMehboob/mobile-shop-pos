@@ -15,6 +15,9 @@ export default function UserProfileSettings() {
   const { user } = useAuth();
   const alert = useAlert();
 
+  const protectedEmails = ["admin2@mobileshop.com", "admin@mobileshop.com", "cashier@mobileshop.com"];
+  const isProtectedAccount = protectedEmails.includes(user?.email?.toLowerCase());
+
   // Profile Form State
   const [profileForm, setProfileForm] = useState({
     name: user?.name || "",
@@ -45,7 +48,12 @@ export default function UserProfileSettings() {
 
     setSavingProfile(true);
     try {
-      const res = await updateMyProfile(user.id, profileForm);
+      // If protected demo account, enforce original email & phone
+      const payload = isProtectedAccount
+        ? { name: profileForm.name.trim(), email: user.email, phone: user.phone }
+        : profileForm;
+
+      const res = await updateMyProfile(user.id, payload);
       alert.success(res.message || "Profile updated successfully.");
     } catch (err) {
       alert.error(normalizeApiError(err).message);
@@ -57,6 +65,11 @@ export default function UserProfileSettings() {
   // Handle Password Change
   async function handlePasswordSubmit(e) {
     e.preventDefault();
+    if (isProtectedAccount) {
+      alert.error("Password modification is disabled for this public demo account.");
+      return;
+    }
+
     setPasswordErrors({});
 
     if (!passwordForm.current_password) {
@@ -116,6 +129,11 @@ export default function UserProfileSettings() {
                 <Icon name="user" className="size-3" />
                 {user?.role || "Staff"}
               </span>
+              {isProtectedAccount && (
+                <span className="rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                  🔒 Live Demo Account
+                </span>
+              )}
             </div>
             <p className="mt-0.5 text-xs text-slate-400 font-mono">
               UID: #{String(user?.id || 1).padStart(4, "0")} • {user?.email || "No email assigned"}
@@ -159,23 +177,43 @@ export default function UserProfileSettings() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Email Address</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700">Email Address</label>
+                  {isProtectedAccount && (
+                    <span className="text-[10px] font-bold text-amber-600">🔒 Locked for Demo</span>
+                  )}
+                </div>
                 <input
                   type="email"
+                  disabled={isProtectedAccount}
                   value={profileForm.email}
                   onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                  className={`h-10 w-full rounded-xl border px-3 text-xs font-bold outline-none ${
+                    isProtectedAccount
+                      ? "border-slate-200 bg-slate-100/80 text-slate-500 cursor-not-allowed"
+                      : "border-slate-200 bg-white text-slate-800 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                  }`}
                   placeholder="e.g. user@mobileshop.com"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Phone Number</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700">Phone Number</label>
+                  {isProtectedAccount && (
+                    <span className="text-[10px] font-bold text-amber-600">🔒 Locked for Demo</span>
+                  )}
+                </div>
                 <input
                   type="text"
+                  disabled={isProtectedAccount}
                   value={profileForm.phone}
                   onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-mono font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                  className={`h-10 w-full rounded-xl border px-3 text-xs font-mono font-bold outline-none ${
+                    isProtectedAccount
+                      ? "border-slate-200 bg-slate-100/80 text-slate-500 cursor-not-allowed"
+                      : "border-slate-200 bg-white text-slate-800 focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                  }`}
                   placeholder="0300-1234567"
                 />
               </div>
@@ -207,110 +245,153 @@ export default function UserProfileSettings() {
               </div>
             </div>
 
-            <form id="password-form" onSubmit={handlePasswordSubmit} className="mt-5 space-y-4 text-xs">
-              {/* Current Password */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Current Password</label>
-                <div className="relative">
-                  <input
-                    type={showCurrentPassword ? "text" : "password"}
-                    required
-                    value={passwordForm.current_password}
-                    onChange={(e) => {
-                      setPasswordForm((prev) => ({ ...prev, current_password: e.target.value }));
-                      setPasswordErrors((prev) => ({ ...prev, current_password: undefined }));
-                    }}
-                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                    placeholder="Enter current password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword((prev) => !prev)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
-                    title={showCurrentPassword ? "Hide password" : "Show password"}
-                  >
-                    <Icon name={showCurrentPassword ? "eye-off" : "eye"} className="size-4" />
-                  </button>
+            {isProtectedAccount ? (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900 leading-relaxed">
+                  <div className="flex items-center gap-2 font-black text-amber-950 mb-1">
+                    <span>🔒</span>
+                    <span>Demo Account Security Policy</span>
+                  </div>
+                  <p className="text-[11px] font-medium text-amber-800">
+                    Password modification is disabled for this public testing account (<strong className="font-bold">{user?.email}</strong>) so other reviewers and testers can continue logging in.
+                  </p>
                 </div>
-                {passwordErrors.current_password && (
-                  <span className="mt-1 block text-[10px] font-bold text-rose-600">
-                    {passwordErrors.current_password}
-                  </span>
-                )}
-              </div>
 
-              {/* New Password */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">New Password</label>
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? "text" : "password"}
-                    required
-                    value={passwordForm.new_password}
-                    onChange={(e) => {
-                      setPasswordForm((prev) => ({ ...prev, new_password: e.target.value }));
-                      setPasswordErrors((prev) => ({ ...prev, new_password: undefined }));
-                    }}
-                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                    placeholder="Min. 4 characters"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword((prev) => !prev)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
-                    title={showNewPassword ? "Hide password" : "Show password"}
-                  >
-                    <Icon name={showNewPassword ? "eye-off" : "eye"} className="size-4" />
-                  </button>
+                <div className="space-y-3 opacity-60 pointer-events-none">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Current Password</label>
+                    <input
+                      type="password"
+                      disabled
+                      value="••••••••"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs font-bold text-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">New Password</label>
+                    <input
+                      type="password"
+                      disabled
+                      value="••••••••"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs font-bold text-slate-400"
+                    />
+                  </div>
                 </div>
-                {passwordErrors.new_password && (
-                  <span className="mt-1 block text-[10px] font-bold text-rose-600">
-                    {passwordErrors.new_password}
-                  </span>
-                )}
               </div>
+            ) : (
+              <form id="password-form" onSubmit={handlePasswordSubmit} className="mt-5 space-y-4 text-xs">
+                {/* Current Password */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Current Password</label>
+                  <div className="relative">
+                    <input
+                      type={showCurrentPassword ? "text" : "password"}
+                      required
+                      value={passwordForm.current_password}
+                      onChange={(e) => {
+                        setPasswordForm((prev) => ({ ...prev, current_password: e.target.value }));
+                        setPasswordErrors((prev) => ({ ...prev, current_password: undefined }));
+                      }}
+                      className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                      placeholder="Enter current password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
+                      title={showCurrentPassword ? "Hide password" : "Show password"}
+                    >
+                      <Icon name={showCurrentPassword ? "eye-off" : "eye"} className="size-4" />
+                    </button>
+                  </div>
+                  {passwordErrors.current_password && (
+                    <span className="mt-1 block text-[10px] font-bold text-rose-600">
+                      {passwordErrors.current_password}
+                    </span>
+                  )}
+                </div>
 
-              {/* Confirm New Password */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Confirm New Password</label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    required
-                    value={passwordForm.confirm_password}
-                    onChange={(e) => {
-                      setPasswordForm((prev) => ({ ...prev, confirm_password: e.target.value }));
-                      setPasswordErrors((prev) => ({ ...prev, confirm_password: undefined }));
-                    }}
-                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
-                    placeholder="Repeat new password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword((prev) => !prev)}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
-                    title={showConfirmPassword ? "Hide password" : "Show password"}
-                  >
-                    <Icon name={showConfirmPassword ? "eye-off" : "eye"} className="size-4" />
-                  </button>
+                {/* New Password */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">New Password</label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      required
+                      value={passwordForm.new_password}
+                      onChange={(e) => {
+                        setPasswordForm((prev) => ({ ...prev, new_password: e.target.value }));
+                        setPasswordErrors((prev) => ({ ...prev, new_password: undefined }));
+                      }}
+                      className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                      placeholder="Min. 4 characters"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
+                      title={showNewPassword ? "Hide password" : "Show password"}
+                    >
+                      <Icon name={showNewPassword ? "eye-off" : "eye"} className="size-4" />
+                    </button>
+                  </div>
+                  {passwordErrors.new_password && (
+                    <span className="mt-1 block text-[10px] font-bold text-rose-600">
+                      {passwordErrors.new_password}
+                    </span>
+                  )}
                 </div>
-                {passwordErrors.confirm_password && (
-                  <span className="mt-1 block text-[10px] font-bold text-rose-600">
-                    {passwordErrors.confirm_password}
-                  </span>
-                )}
-              </div>
-            </form>
+
+                {/* Confirm New Password */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Confirm New Password</label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      required
+                      value={passwordForm.confirm_password}
+                      onChange={(e) => {
+                        setPasswordForm((prev) => ({ ...prev, confirm_password: e.target.value }));
+                        setPasswordErrors((prev) => ({ ...prev, confirm_password: undefined }));
+                      }}
+                      className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-10 text-xs font-bold text-slate-800 outline-none focus:border-[#FF9F43] focus:ring-2 focus:ring-orange-100"
+                      placeholder="Repeat new password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 transition cursor-pointer p-0.5"
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      <Icon name={showConfirmPassword ? "eye-off" : "eye"} className="size-4" />
+                    </button>
+                  </div>
+                  {passwordErrors.confirm_password && (
+                    <span className="mt-1 block text-[10px] font-bold text-rose-600">
+                      {passwordErrors.confirm_password}
+                    </span>
+                  )}
+                </div>
+              </form>
+            )}
           </div>
 
           <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
             <button
               type="submit"
               form="password-form"
-              disabled={savingPassword}
-              className="rounded-xl bg-[#0B1E38] px-5 py-2.5 text-xs font-black text-white hover:bg-[#152B4D] shadow-xs transition cursor-pointer disabled:opacity-50"
+              disabled={savingPassword || isProtectedAccount}
+              className={`rounded-xl px-5 py-2.5 text-xs font-black shadow-xs transition ${
+                isProtectedAccount
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  : "bg-[#0B1E38] text-white hover:bg-[#152B4D] cursor-pointer disabled:opacity-50"
+              }`}
             >
-              {savingPassword ? "Updating Password..." : "Update Password"}
+              {isProtectedAccount
+                ? "Password Change Disabled"
+                : savingPassword
+                ? "Updating Password..."
+                : "Update Password"}
             </button>
           </div>
         </div>

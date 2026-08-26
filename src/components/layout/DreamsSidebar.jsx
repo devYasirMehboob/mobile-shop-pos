@@ -4,6 +4,7 @@ import Icon from "../Icon";
 import useAuth from "../../hooks/useAuth";
 import usePermissions from "../../hooks/usePermissions";
 import useSettings from "../../hooks/useSettings";
+import ContactDeveloperModal from "../common/ContactDeveloperModal";
 
 const sidebarGroups = [
   {
@@ -72,6 +73,7 @@ export default function DreamsSidebar({
   const shop = settings?.shop || {};
   const location = useLocation();
   const navigate = useNavigate();
+  const [showContactModal, setShowContactModal] = useState(false);
 
   const visibleGroups = sidebarGroups
     .map((group) => ({

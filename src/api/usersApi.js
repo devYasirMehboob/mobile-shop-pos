@@ -176,24 +176,30 @@ export async function resetUserPassword(id, data) {
   return response.data;
 }
 
+const PROTECTED_DEMO_EMAILS = ["admin2@mobileshop.com", "admin@mobileshop.com", "cashier@mobileshop.com"];
+
 export async function updateMyProfile(id, { name, email, phone }) {
   if (isSupabaseConfigured()) {
     const cleanEmail = email?.trim()?.toLowerCase() || null;
     const cleanPhone = phone?.trim() || null;
     const nowIso = new Date().toISOString();
 
+    // Check if user is a protected demo account
+    const cachedUser = localStorage.getItem("mobile_pos_user");
+    const currentEmail = cachedUser ? JSON.parse(cachedUser)?.email?.toLowerCase() : cleanEmail;
+    const isProtected = PROTECTED_DEMO_EMAILS.includes(currentEmail) || PROTECTED_DEMO_EMAILS.includes(cleanEmail);
+
     let updated = null;
 
     // 1. Try updating by ID
     if (id && !isNaN(Number(id))) {
+      const updateData = isProtected
+        ? { name, updated_at: nowIso }
+        : { name, email: cleanEmail, phone: cleanPhone, updated_at: nowIso };
+
       const { data } = await supabase
         .from("access_credentials")
-        .update({
-          name,
-          email: cleanEmail,
-          phone: cleanPhone,
-          updated_at: nowIso,
-        })
+        .update(updateData)
         .eq("id", Number(id))
         .select("id, name, email, phone, role, is_active")
         .maybeSingle();
@@ -203,13 +209,13 @@ export async function updateMyProfile(id, { name, email, phone }) {
 
     // 2. If not matched by ID, try updating by email
     if (!updated && cleanEmail) {
+      const updateData = isProtected
+        ? { name, updated_at: nowIso }
+        : { name, phone: cleanPhone, updated_at: nowIso };
+
       const { data } = await supabase
         .from("access_credentials")
-        .update({
-          name,
-          phone: cleanPhone,
-          updated_at: nowIso,
-        })
+        .update(updateData)
         .ilike("email", cleanEmail)
         .select("id, name, email, phone, role, is_active")
         .maybeSingle();
@@ -239,10 +245,10 @@ export async function updateMyProfile(id, { name, email, phone }) {
       updated = created || { id: Number(id) || 1, ...newRec };
     }
 
-    // 4. Also update Supabase Auth metadata
+    // 4. Also update Supabase Auth metadata (only name for demo)
     try {
       await supabase.auth.updateUser({
-        data: { name, full_name: name, phone: cleanPhone },
+        data: isProtected ? { name, full_name: name } : { name, full_name: name, phone: cleanPhone },
       });
     } catch {}
 
@@ -264,6 +270,13 @@ export async function updateMyProfile(id, { name, email, phone }) {
 
 export async function changeMyPassword(id, { current_password, new_password }) {
   if (isSupabaseConfigured()) {
+    // Check if user is a protected demo account
+    const cachedUser = localStorage.getItem("mobile_pos_user");
+    const currentEmail = cachedUser ? JSON.parse(cachedUser)?.email?.toLowerCase() : "";
+    if (PROTECTED_DEMO_EMAILS.includes(currentEmail)) {
+      throw new Error("Password modification is disabled for this public demo account.");
+    }
+
     // 1. Try Supabase Auth password update
     try {
       await supabase.auth.updateUser({ password: new_password });

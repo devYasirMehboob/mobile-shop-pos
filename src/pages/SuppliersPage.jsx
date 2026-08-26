@@ -74,7 +74,7 @@ function SuppliersPage() {
   );
 
   useEffect(() => {
-    document.title = "Suppliers | Dreams POS";
+    document.title = "Suppliers | BiteBlix POS";
     loadData(filters);
   }, [loadData, filters]);
 

@@ -73,7 +73,7 @@ function UnitsPage() {
   );
 
   useEffect(() => {
-    document.title = "Units | Dreams POS";
+    document.title = "Units | BiteBlix POS";
     loadUnits();
   }, [loadUnits]);
 

@@ -86,7 +86,7 @@ function BatchesPage() {
   );
 
   useEffect(() => {
-    document.title = "Batches | Dreams POS";
+    document.title = "Batches | BiteBlix POS";
     loadBatches(defaultFilters);
   }, [loadBatches]);
 

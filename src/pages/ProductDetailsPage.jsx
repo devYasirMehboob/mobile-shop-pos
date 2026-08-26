@@ -44,7 +44,7 @@ function ProductDetailsPage() {
       try {
         const data = await getProduct(id);
         setProduct(data);
-        document.title = `${data.name || "Product Details"} | Dreams POS`;
+        document.title = `${data.name || "Product Details"} | BiteBlix POS`;
       } catch (e) {
         alert.error(normalizeApiError(e).message);
       } finally {

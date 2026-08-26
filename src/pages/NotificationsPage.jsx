@@ -53,7 +53,7 @@ export default function NotificationsPage() {
   }, [fetchNotifications, currentPage, search, statusTab, severityFilter]);
 
   useEffect(() => {
-    document.title = "Notifications | Dreams POS";
+    document.title = "Notifications | BiteBlix POS";
     loadData();
   }, [loadData]);
 

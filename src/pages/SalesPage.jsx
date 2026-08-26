@@ -117,10 +117,10 @@ function SalesPage() {
 
   useEffect(() => {
     document.title = isReturnsTab
-      ? "Sales Returns | Dreams POS"
+      ? "Sales Returns | BiteBlix POS"
       : isInvoicesView
-      ? "Invoices | Dreams POS"
-      : "Sales Transactions | Dreams POS";
+      ? "Invoices | BiteBlix POS"
+      : "Sales Transactions | BiteBlix POS";
 
     loadData(defaultFilters);
   }, [loadData, isReturnsTab, isInvoicesView]);

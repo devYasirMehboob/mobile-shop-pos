@@ -14,7 +14,7 @@ export default function ComingSoonPage() {
   const [subscribed, setSubscribed] = useState(false);
 
   useEffect(() => {
-    document.title = "Coming Soon | Dreams POS";
+    document.title = "Coming Soon | BiteBlix POS";
 
     const interval = setInterval(() => {
       setTimeLeft((prev) => {

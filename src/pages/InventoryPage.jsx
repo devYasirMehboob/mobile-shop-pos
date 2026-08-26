@@ -134,11 +134,11 @@ function InventoryPage() {
   );
 
   useEffect(() => {
-    document.title = isAdjustmentTab
-      ? "Stock Adjustment | Dreams POS"
-      : isLowStockRoute
-      ? "Low Stocks | Dreams POS"
-      : "Manage Stock | Dreams POS";
+    document.title = activeTab === "adjustment"
+      ? "Stock Adjustment | BiteBlix POS"
+      : filterParam === "low"
+      ? "Low Stocks | BiteBlix POS"
+      : "Manage Stock | BiteBlix POS";
 
     async function initialize() {
       try {

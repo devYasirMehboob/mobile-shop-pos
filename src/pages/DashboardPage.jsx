@@ -35,14 +35,14 @@ function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    document.title = "Dashboard | Dreams POS";
+    document.title = "Dashboard | BiteBlix POS";
     loadDashboard();
   }, [loadDashboard]);
 
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8">
-        <LoadingState label="Loading Dreams POS dashboard..." />
+        <LoadingState label="Loading BiteBlix POS dashboard..." />
       </div>
     );
   }
@@ -100,7 +100,7 @@ function DashboardPage() {
         totalExpense={summary.total_expenses ?? 0}
       />
 
-      {/* 6. TOP CUSTOMERS + TOP CATEGORIES DONUT + ORDER STATISTICS HEATMAP */}
+      {/* 6. BOTTOM INSIGHTS: TOP CUSTOMERS, TOP CATEGORIES & POS PEAK HOURS HEATMAP */}
       <DreamsBottomInsights
         topCustomers={dashboard.top_customers || []}
         topCategories={dashboard.top_categories || []}
@@ -111,10 +111,17 @@ function DashboardPage() {
 
       {/* FOOTER COPYRIGHT */}
       <footer className="mt-8 pt-4 border-t border-slate-200/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-semibold text-slate-400">
-        <p>2014-2025 © DreamsPOS. All Rights Reserved</p>
+        <p>2025-2026 BiteBlix Solutions All right reserved</p>
         <p>
           Designed &amp; Developed By{" "}
-          <span className="text-[#FF9F43] font-bold">Dreams</span>
+          <a
+            href="https://biteblixsolutions.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#FF9F43] font-bold hover:underline"
+          >
+            biteblixsolutions.com
+          </a>
         </p>
       </footer>
     </div>

@@ -22,7 +22,7 @@ function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    document.title = "Sign In | Dreams POS";
+    document.title = "Sign In | BiteBlix POS";
   }, []);
 
   if (!isLoading && user) return <Navigate to={homeFor(user)} replace />;
@@ -74,7 +74,7 @@ function LoginPage() {
         aria-hidden="true"
       />
 
-      {/* TOP BRAND LOGO (Dreams POS) */}
+      {/* TOP BRAND LOGO (BiteBlix POS) */}
       <header className="relative z-10 pt-6 sm:pt-8 flex items-center justify-center">
         <div className="flex items-center gap-2.5">
           {/* Logo Bag Icon */}
@@ -86,7 +86,7 @@ function LoginPage() {
           {/* Brand Name */}
           <div className="flex items-baseline gap-1">
             <span className="text-2xl font-black tracking-tight text-[#0B1E38]">
-              Dreams
+              BiteBlix
             </span>
             <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-black uppercase text-[#FF9F43] tracking-widest leading-none">
               POS
@@ -103,7 +103,7 @@ function LoginPage() {
             Sign In
           </h1>
           <p className="mt-1.5 text-xs font-medium text-slate-500">
-            Access the Dreamspos panel using your email and passcode.
+            Access the BiteBlix POS panel using your email and passcode.
           </p>
 
           {/* Error Message */}
@@ -117,15 +117,15 @@ function LoginPage() {
             </div>
           )}
 
-          {/* Form */}
-          <form className="mt-5 space-y-4" onSubmit={handleSubmit} noValidate>
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             {/* Email Field */}
             <div>
               <label
                 className="mb-1.5 block text-xs font-bold text-slate-700"
                 htmlFor="email"
               >
-                Email <span className="text-rose-500">*</span>
+                Email Address <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <input
@@ -190,8 +190,19 @@ function LoginPage() {
       </main>
 
       {/* FOOTER COPYRIGHT */}
-      <footer className="relative z-10 pb-4 text-center text-xs font-semibold text-slate-400">
-        Copyrights © 2025 - DreamsPOS
+      <footer className="relative z-10 pb-4 text-center text-xs font-semibold text-slate-400 space-y-1">
+        <p>2025-2026 BiteBlix Solutions All right reserved</p>
+        <p>
+          Designed &amp; Developed By{" "}
+          <a
+            href="https://biteblixsolutions.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#FF9F43] font-bold hover:underline"
+          >
+            biteblixsolutions.com
+          </a>
+        </p>
       </footer>
     </div>
   );

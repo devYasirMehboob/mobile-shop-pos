@@ -155,7 +155,7 @@ function PosPage() {
   const [amountWeightProduct, setAmountWeightProduct] = useState(null);
 
   useEffect(() => {
-    document.title = "Point of Sale | Dreams POS";
+    document.title = "Point of Sale | BiteBlix POS";
   }, []);
 
   useEffect(() => {

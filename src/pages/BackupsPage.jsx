@@ -73,7 +73,7 @@ function BackupsPage() {
   }
 
   useEffect(() => {
-    document.title = "Database Backups | Dreams POS";
+    document.title = "Database Backups | BiteBlix POS";
     load();
   }, [load]);
 

@@ -72,7 +72,7 @@ function CategoriesPage() {
   );
 
   useEffect(() => {
-    document.title = "Category | Dreams POS";
+    document.title = "Category | BiteBlix POS";
     loadCategories();
   }, [loadCategories]);
 

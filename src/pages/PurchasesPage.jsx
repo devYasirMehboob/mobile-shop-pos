@@ -90,7 +90,7 @@ function PurchasesPage() {
   );
 
   useEffect(() => {
-    document.title = "Purchases | Dreams POS";
+    document.title = "Purchases | BiteBlix POS";
     loadData(initialFilters);
   }, [loadData]);
 

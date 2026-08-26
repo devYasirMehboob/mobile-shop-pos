@@ -134,7 +134,7 @@ export default function DreamsSidebar({
             >
               <div className="flex items-baseline gap-1">
                 <span className="text-[19px] font-black tracking-tight text-[#0B1E38]">
-                  {shop.shop_name || "Dreams"}
+                  {shop.shop_name || "Biteblix"}
                 </span>
                 <span className="rounded bg-orange-100 px-1 py-0.5 text-[10px] font-black uppercase text-[#FF9F43] tracking-widest leading-none">
                   POS

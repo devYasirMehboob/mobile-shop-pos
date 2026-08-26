@@ -71,7 +71,7 @@ function ProductFormPage() {
   const [units, setUnits] = useState([]);
 
   useEffect(() => {
-    document.title = `${isEdit ? "Edit Product" : "Create Product"} | Dreams POS`;
+    document.title = `${isEdit ? "Edit Product" : "Create Product"} | BiteBlix POS`;
 
     async function init() {
       try {

@@ -126,7 +126,7 @@ function ReportsPage() {
   const config = configs[activeType] || configs.overview;
 
   useEffect(() => {
-    document.title = `${config.title} | Reports | Dreams POS`;
+    document.title = `${config.title} | Reports | BiteBlix POS`;
   }, [config]);
 
   useEffect(() => {

@@ -68,7 +68,7 @@ class ErrorBoundary extends React.Component {
               </div>
             </div>
             <p className="mt-6 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Dreams POS · System Error Handler
+              BiteBlix POS · System Error Handler
             </p>
           </div>
         );

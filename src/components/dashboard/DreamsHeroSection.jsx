@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../Icon";
 import useAuth from "../../hooks/useAuth";
+import ContactDeveloperModal from "../common/ContactDeveloperModal";
 
 export default function DreamsHeroSection({
   todayOrders = 0,
@@ -10,6 +11,7 @@ export default function DreamsHeroSection({
 }) {
   const { user } = useAuth();
   const [showBanner, setShowBanner] = useState(true);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   // Formatted date range for right badge
   const currentDate = new Date();
@@ -23,7 +25,7 @@ export default function DreamsHeroSection({
 
   return (
     <div className="space-y-4">
-      {/* Top Welcome Title & Date Range */}
+      {/* Top Welcome Title & Date Range + Contact Developer */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-[26px] font-black text-[#0B1E38] tracking-tight">
@@ -34,10 +36,23 @@ export default function DreamsHeroSection({
           </p>
         </div>
 
-        {/* Date Range Picker Badge */}
-        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs">
-          <Icon name="clock" className="size-4 text-slate-400" />
-          <span>{dateRangeStr}</span>
+        {/* Right Actions: Contact Developer + Date Range */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowContactModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/80 px-3.5 py-2 text-xs font-black text-blue-700 shadow-2xs hover:bg-blue-100 hover:border-blue-300 transition active:scale-95 cursor-pointer"
+            title="Contact Developer via WhatsApp & Email"
+          >
+            <span>👨‍💻</span>
+            <span>Contact Developer</span>
+          </button>
+
+          {/* Date Range Picker Badge */}
+          <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs">
+            <Icon name="clock" className="size-4 text-slate-400" />
+            <span>{dateRangeStr}</span>
+          </div>
         </div>
       </div>
 
@@ -110,6 +125,12 @@ export default function DreamsHeroSection({
           </button>
         </div>
       )}
+
+      {/* Contact Developer Popup Modal */}
+      <ContactDeveloperModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+      />
     </div>
   );
 }

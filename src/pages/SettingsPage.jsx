@@ -84,7 +84,7 @@ function SettingsPage() {
   }
 
   useEffect(() => {
-    document.title = "Settings | Dreams POS";
+    document.title = "Settings | BiteBlix POS";
     load();
   }, []);
 

@@ -96,7 +96,7 @@ function PurchaseReturnsPage() {
   );
 
   useEffect(() => {
-    document.title = "Purchase Returns | Dreams POS";
+    document.title = "Purchase Returns | BiteBlix POS";
     loadData(initialFilters);
   }, [loadData]);
 

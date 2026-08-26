@@ -148,7 +148,7 @@ function ExpensesPage() {
   );
 
   useEffect(() => {
-    document.title = "Expenses | Dreams POS";
+    document.title = "Expenses | BiteBlix POS";
     loadData(initialFilters);
   }, [loadData]);
 

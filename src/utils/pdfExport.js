@@ -1149,7 +1149,7 @@ async function renderReportToCanvas(title, rows = [], columns = [], summary = {}
   ctx.font = `italic 11px ${fontSans}`;
   ctx.fillStyle = "#64748b";
   ctx.textAlign = "left";
-  ctx.fillText("Dreams POS Analytical Engine — Official Business Record", margin, y);
+  ctx.fillText("BiteBlix POS Analytical Engine — Official Business Record", margin, y);
 
   ctx.textAlign = "right";
   ctx.fillText(`Page 1 of 1 • Total Records: ${rows.length}`, canvasWidth - margin, y);

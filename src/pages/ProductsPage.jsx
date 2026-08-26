@@ -113,7 +113,7 @@ function ProductsPage() {
   }, [alert]);
 
   useEffect(() => {
-    document.title = "Products | Dreams POS";
+    document.title = "Products | BiteBlix POS";
 
     async function initialize() {
       try {

@@ -134,7 +134,8 @@ export default function ContactDeveloperModal({ isOpen, onClose }) {
         {/* Modal Footer */}
         <div className="mt-5 text-center">
           <p className="text-[11px] text-slate-400 font-medium">
-            2025-2026 BiteBlix Solutions All right reserved • Designed &amp; Developed By{" "}
+            2025-2026 BiteBlix Solutions All right reserved <br />
+            Designed &amp; Developed By{" "}
             <a
               href="https://biteblixsolutions.com"
               target="_blank"

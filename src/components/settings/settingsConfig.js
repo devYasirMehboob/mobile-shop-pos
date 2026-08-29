@@ -255,11 +255,4 @@ export const settingsSections = [
       ["automatic_backup_time", "Preferred backup time", "time"],
     ],
   },
-  {
-    key: "demo_data",
-    label: "Demo Data & Seeding",
-    description: "Populate complete test products, categories, batches & sales",
-    isCustom: true,
-    private: true,
-  },
 ];

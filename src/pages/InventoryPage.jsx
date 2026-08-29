@@ -134,9 +134,9 @@ function InventoryPage() {
   );
 
   useEffect(() => {
-    document.title = activeTab === "adjustment"
+    document.title = isAdjustmentTab
       ? "Stock Adjustment | BiteBlix POS"
-      : filterParam === "low"
+      : isLowStockRoute
       ? "Low Stocks | BiteBlix POS"
       : "Manage Stock | BiteBlix POS";
 

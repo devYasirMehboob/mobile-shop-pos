@@ -398,23 +398,22 @@ function ReportsPage() {
                 </div>
               )}
 
-              {/* Report Table Panel */}
-              <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-4">
+              {/* Report Table Panel (Interactive DataTable) */}
+              <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
                 {data.rows?.length ? (
-                  <>
-                    <ReportTable
-                      rows={data.rows}
-                      columns={visibleColumns}
-                      filters={filters}
-                      onSort={sort}
-                    />
-                    <ReportPagination
-                      pagination={data.pagination}
-                      onPage={(page) =>
-                        setFilters((current) => ({ ...current, page }))
-                      }
-                    />
-                  </>
+                  <ReportTable
+                    rows={data.rows}
+                    columns={visibleColumns}
+                    filters={filters}
+                    onSort={sort}
+                    pagination={data.pagination}
+                    onPageChange={(page) =>
+                      setFilters((current) => ({ ...current, page }))
+                    }
+                    onLimitChange={(limit) =>
+                      setFilters((current) => ({ ...current, limit, page: 1 }))
+                    }
+                  />
                 ) : (
                   <EmptyState
                     icon="reports"
